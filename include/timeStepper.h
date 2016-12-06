@@ -54,7 +54,7 @@ class timeStepper {
     return m_ti;
   }
   
-  int setInitialDisplacement(Vec InitialDisplacement);
+  int setInitialTemperature(Vec initTemp);
 
   int setInitialVelocity(Vec InitialVelocity);
 
@@ -71,7 +71,7 @@ class timeStepper {
   virtual void  jacobianMatMult(Vec _in, Vec _out)= 0;
   virtual void jacobianGetDiagonal(Vec diag) = 0;
 
-  virtual void  mgjacobianMatMult(DA _da, Vec _in, Vec _out)= 0;
+  virtual void  mgjacobianMatMult(DM _da, Vec _in, Vec _out)= 0;
 
   virtual bool  setRHSFunction(Vec _in, Vec _out) = 0;
   /**
@@ -113,18 +113,18 @@ class timeStepper {
 	 return(0);
   }
 
-  static void MGMatMult(Mat M, Vec In, Vec Out){
+/*  static void MGMatMult(Mat M, Vec In, Vec Out){
 	 stsDMMG *contxt;
 	 MatShellGetContext(M,(void**)&contxt);
 
-	 DA da = (DA)(((stsDMMG)contxt)->dm);
+	 DM da = (DM)(((stsDMMG)contxt)->dm);
 
 	 ((timeStepper*)(((stsDMMG)contxt)->user))->mgjacobianMatMult(da,In,Out);
-  }
+  }*/
 
   
-  static PetscErrorCode CreateJacobian(stsDMMG dmmg, Mat *J){
-	 DA da = (DA)(dmmg->dm);
+/*  static PetscErrorCode CreateJacobian(stsDMMG dmmg, Mat *J){
+	 DM da = (DM)(dmmg->dm);
 	 int m,n,xm,ym,zm;
 	 int ierr;
 	 DALocalInfo info;
@@ -162,7 +162,7 @@ class timeStepper {
 	 VecNorm(X,NORM_INFINITY,&norm);
 	 std::cout << " InitialGuess norm " << norm << std::endl;
 	 return(0);
-  }
+  }*/
 
   /**
 	*	@brief return the force vector (this is for static vector)
@@ -232,7 +232,7 @@ class timeStepper {
   KSP				m_ksp;
 
   // stsDMMG Multigrid
-  stsDMMG      *m_dmmg;
+  //stsDMMG      *m_dmmg;
   
   // Time info
   timeInfo     *m_ti;

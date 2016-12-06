@@ -37,9 +37,9 @@ timeStepper::~timeStepper()
  * @param  PETSC Vec InitialDisplacement
  * @return bool true if successful, false otherwise
  **/
-int timeStepper::setInitialDisplacement(Vec InitialDisplacement)
+int timeStepper::setInitialTemperature(Vec initialTemperature)
 {
-  m_vecInitialSolution = InitialDisplacement;
+  m_vecInitialSolution = initialTemperature;
   return(0);
 }
 /**

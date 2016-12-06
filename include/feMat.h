@@ -40,10 +40,10 @@ class feMat {
     return m_daType;
   }
 
-  void setDA (DA da) { m_DA = da; }
+  void setDA (DM da) { m_DA = da; }
   void setDA (ot::DA* da) { m_octDA = da; }
 
-  DA getDA() { return m_DA; }
+  DM getDA() { return m_DA; }
   ot::DA* getOctDA() { return m_octDA; }
   /**
    * 	@brief		The matrix-vector multiplication routine that is used by
@@ -73,7 +73,7 @@ protected:
 
   daType          m_daType;
 	
-  DA              m_DA;
+  DM              m_DA;
   ot::DA*         m_octDA;
   /// The dimensions of the problem.
   double m_dLx;
