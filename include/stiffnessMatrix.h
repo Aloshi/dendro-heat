@@ -215,7 +215,7 @@ bool stiffnessMatrix::preMatVec() {
     m_nuarray = nuarray;
     // compute Hx
     PetscInt mx,my,mz;
-    ierr = DAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0); CHKERRQ(ierr); 
+    ierr = DMDAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0,0,0); CHKERRQ(ierr); 
     CHKERRQ(ierr);
     
     m_dHx = m_dLx/(mx -1);
@@ -255,7 +255,7 @@ bool stiffnessMatrix::ElementalMatVec(unsigned int i, PetscScalar *in, PetscScal
   double fac11 = -hx*scale/192.0;
   
   stdElemType elemType;
-  ot::DA::index idx[8];
+  unsigned int idx[8];
 
   // unsigned char hangingMask = m_octDA->getHangingNodeIndex(i);    //  alignElementAndVertices(m_octDA, elemType, idx);       
   int ***Aijk = (int ***)m_stencil;
@@ -376,7 +376,7 @@ bool stiffnessMatrix::ElementalMatGetDiagonal(unsigned int i, PetscScalar *diag,
   double fac11 = -hx*scale/192.0;
   
   stdElemType elemType;
-  ot::DA::index idx[8];
+  unsigned int idx[8];
 
   // unsigned char hangingMask = m_octDA->getHangingNodeIndex(i);    //  alignElementAndVertices(m_octDA, elemType, idx);       
   int ***Aijk = (int ***)m_stencil;

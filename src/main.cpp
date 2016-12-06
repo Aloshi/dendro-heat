@@ -7,11 +7,16 @@ static char help[] = "Driver for heat";
 
 #include "petscksp.h"
 
+//#include "oda.h"
+//#include "TreeNode.h"
+//#include "parUtils.h"
+//#include "omg.h"
+
 #include "timeInfo.h"
-#include "feMatrix.h"
-#include "feVector.h"
+//#include "feMatrix.h"
+//#include "feVector.h"
 //#include "femUtils.h"
-#include "timeStepper.h"
+//#include "timeStepper.h"
 //#include "newmark.h"
 //#include "elasStiffness.h"
 //#include "elasMass.h"
@@ -84,9 +89,9 @@ int main(int argc, char **argv)
   elasStiffness *Stiffness = new stiffnessMatrix(feMat::PETSC); // Stiffness matrix
 
   // create vectors 
-  CHKERRQ( DACreateGlobalVector(da, &rho) );
+  CHKERRQ( DMDACreateGlobalVector(da, &rho) );
 
-  CHKERRQ( DACreateGlobalVector(da, &initialTemperature) );
+  CHKERRQ( DMDACreateGlobalVector(da, &initialTemperature) );
 
   // Set initial conditions
   CHKERRQ( VecSet ( initialTemperature, 0.0) ); 
@@ -96,8 +101,8 @@ int main(int argc, char **argv)
   int x, y, z, m, n, p;
   int mx,my,mz, xne, yne, zne;
 
-  CHKERRQ( DAGetCorners(da, &x, &y, &z, &m, &n, &p) ); 
-  CHKERRQ( DAGetInfo(da,0, &mx, &my, &mz, 0,0,0,0,0,0,0) ); 
+  CHKERRQ( DMDAGetCorners(da, &x, &y, &z, &m, &n, &p) ); 
+  CHKERRQ( DMDAGetInfo(da,0, &mx, &my, &mz, 0,0,0,0,0,0,0,0,0) ); 
 
   if (x+m == mx) {
     xne=m-1;
@@ -138,8 +143,8 @@ int main(int argc, char **argv)
   // Set Elemental material properties
   PetscScalar ***initialTemperatureArray, ***rhoArray;
 
-  CHKERRQ(DAVecGetArray(da, initialTemperature, &initialTemperatureArray));
-  CHKERRQ(DAVecGetArray(da, rho, &rhoArray));
+  CHKERRQ(DMDAVecGetArray(da, initialTemperature, &initialTemperatureArray));
+  CHKERRQ(DMDAVecGetArray(da, rho, &rhoArray));
 
   std::cout << "Setting initial guess." << std::endl;
 
@@ -158,8 +163,8 @@ int main(int argc, char **argv)
 
   std::cout << "Finished initial conditions loop." << std::endl;
 
-  CHKERRQ( DAVecRestoreArray ( da, initialTemperature, &initialTemperatureArray ) );
-  CHKERRQ( DAVecRestoreArray ( da, rho, &rhoArray ) );
+  CHKERRQ( DMDAVecRestoreArray ( da, initialTemperature, &initialTemperatureArray ) );
+  CHKERRQ( DMDAVecRestoreArray ( da, rho, &rhoArray ) );
 
   // std::cout << "Finished restoring arrays" << std::endl; 
   

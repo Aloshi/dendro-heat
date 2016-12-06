@@ -39,7 +39,7 @@ class parabolic : public timeStepper //<parabolic>
   virtual void jacobianMatMult(Vec In, Vec Out);
   virtual void jacobianGetDiagonal(Vec diag) {};
 
-  virtual void mgjacobianMatMult(DA da, Vec In, Vec Out);
+  virtual void mgjacobianMatMult(DM da, Vec In, Vec Out);
   /**
 	*	@brief Sets the right hand side vector given the current solution
 	*  @param m_vecCurrentSolution PETSC Vec, current solution
@@ -193,7 +193,7 @@ void parabolic::jacobianMatMult(Vec In, Vec Out)
   m_Qtype->MatVec(In,Out,m_ti->step); /* dt factor for qtype matrix*/
 }
 
-void parabolic::mgjacobianMatMult(DA da, Vec In, Vec Out){
+void parabolic::mgjacobianMatMult(DM da, Vec In, Vec Out){
 }
 /**
  *	@brief Set right hand side used in stepping at every time step

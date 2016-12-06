@@ -135,9 +135,9 @@ class feVector : public feVec {
 		return type;
   }
 
-  inline PetscErrorCode alignElementAndVertices(ot::DA * da, stdElemType & sType, ot::DA::index* indices);
-  inline PetscErrorCode mapVtxAndFlagsToOrientation(int childNum, ot::DA::index* indices, unsigned char & mask);
-  inline PetscErrorCode reOrderIndices(unsigned char eType, ot::DA::index* indices);
+  inline PetscErrorCode alignElementAndVertices(ot::DA * da, stdElemType & sType, unsigned int* indices);
+  inline PetscErrorCode mapVtxAndFlagsToOrientation(int childNum, unsigned int* indices, unsigned char & mask);
+  inline PetscErrorCode reOrderIndices(unsigned char eType, unsigned int* indices);
 
 protected:
   void *          	m_stencil;
@@ -593,7 +593,7 @@ bool feVector<T>::computeVec(Vec _in, Vec _out,double scale){
 #undef __FUNCT__
 #define __FUNCT__ "alignElementAndVertices"
 template <typename T>
-PetscErrorCode feVector<T>::alignElementAndVertices(ot::DA * da, stdElemType & sType, ot::DA::index* indices) {
+PetscErrorCode feVector<T>::alignElementAndVertices(ot::DA * da, stdElemType & sType, unsigned int* indices) {
   PetscFunctionBegin;
   
   sType = ST_0;
@@ -623,9 +623,9 @@ PetscErrorCode feVector<T>::alignElementAndVertices(ot::DA * da, stdElemType & s
 #undef __FUNCT__
 #define __FUNCT__ "mapVtxAndFlagsToOrientation"
 template <typename T>
-PetscErrorCode feVector<T>::mapVtxAndFlagsToOrientation(int childNum, ot::DA::index* indices, unsigned char & mask) {
+PetscErrorCode feVector<T>::mapVtxAndFlagsToOrientation(int childNum, unsigned int* indices, unsigned char & mask) {
   PetscFunctionBegin;
-  ot::DA::index tmp[8];
+  unsigned int tmp[8];
   unsigned char tmpFlags = 0;
   for (int i=0;i<8;i++) {
     tmp[i] = indices[m_ucpLut[childNum][i]];
@@ -641,12 +641,12 @@ PetscErrorCode feVector<T>::mapVtxAndFlagsToOrientation(int childNum, ot::DA::in
 #undef __FUNCT__
 #define __FUNCT__ "reOrderIndices"
 template <typename T>
-PetscErrorCode feVector<T>::reOrderIndices(unsigned char eType, ot::DA::index* indices) {
+PetscErrorCode feVector<T>::reOrderIndices(unsigned char eType, unsigned int* indices) {
 #ifdef __DEBUG_1
   std::cout << "Entering " << __func__ << std::endl;
 #endif
   PetscFunctionBegin;
-  ot::DA::index tmp;
+  unsigned int tmp;
   switch (eType) {
   case  ET_N: 
     break;

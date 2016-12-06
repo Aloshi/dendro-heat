@@ -13,7 +13,7 @@ EXECUTABLE = dendroHeat
 CXX = g++
 CXX_FLAGS += -std=c++11
 
-INCLUDES = -I./include -I$(DENDRO_DIR)/include -I$(DENDRO_DIR)/include/oda -I$(DENDRO_DIR)/build $(PETSC_CC_INCLUDES)
+INCLUDES = -I./include -I$(DENDRO_DIR)/include -I$(DENDRO_DIR)/include/oda -I$(DENDRO_DIR)/include/fem -I$(DENDRO_DIR)/include/omg -I$(DENDRO_DIR)/build $(PETSC_CC_INCLUDES)
 LIBS = -L$(DENDRO_DIR)/build -ldendro -ldendroDA -ldendroMG $(PETSC_LIB)
 
 # Generate the list of object files by replacing suffixes in SOURCES (e.g. main.cpp -> main.o).

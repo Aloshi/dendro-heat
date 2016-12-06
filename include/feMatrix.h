@@ -2,6 +2,7 @@
 #define __FE_MATRIX_H_
 
 #include <string>
+#include "odaUtils.h"
 #include "feMat.h"
 #include "timeInfo.h"
 
@@ -179,9 +180,9 @@ class feMatrix : public feMat {
 		return type;
   }
 	
-  inline PetscErrorCode alignElementAndVertices(ot::DA * da, stdElemType & sType, ot::DA::index* indices);
-  inline PetscErrorCode mapVtxAndFlagsToOrientation(int childNum, ot::DA::index* indices, unsigned char & mask);
-  inline PetscErrorCode reOrderIndices(unsigned char eType, ot::DA::index* indices);
+  inline PetscErrorCode alignElementAndVertices(ot::DA * da, stdElemType & sType, unsigned int* indices);
+  inline PetscErrorCode mapVtxAndFlagsToOrientation(int childNum, unsigned int* indices, unsigned char & mask);
+  inline PetscErrorCode reOrderIndices(unsigned char eType, unsigned int* indices);
 
 protected:
   void *          	m_stencil;
@@ -282,9 +283,9 @@ bool feMatrix<T>::MatGetDiagonal(Vec _diag, double scale){
 		/* Get all corners*/
 		if (m_DA == NULL)
 			std::cerr << "Da is null" << std::endl;
-		ierr = DAGetCorners(m_DA, &x, &y, &z, &m, &n, &p); CHKERRQ(ierr); 
+		ierr = DMDAGetCorners(m_DA, &x, &y, &z, &m, &n, &p); CHKERRQ(ierr); 
 		/* Get Info*/
-		ierr = DAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0); CHKERRQ(ierr); 
+		ierr = DMDAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0,0,0); CHKERRQ(ierr); 
 
 		if (x+m == mx) {
 			xne=m-1;
@@ -345,7 +346,7 @@ bool feMatrix<T>::MatGetDiagonal(Vec _diag, double scale){
 		preMatVec();
 
 		// loop through all elements ...
-		for ( m_octDA->init<ot::DA::ALL>(); m_octDA->curr() < m_octDA->end<ot::DA::ALL>(); m_octDA->next<ot::DA::ALL>() ) {
+		for ( m_octDA->init<ot::DA_FLAGS::ALL>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::ALL>(); m_octDA->next<ot::DA_FLAGS::ALL>() ) {
 			ElementalMatGetDiagonal( m_octDA->curr(), diag, scale); 
 		}//end 
 
@@ -398,9 +399,9 @@ bool feMatrix<T>::MatVec(Vec _in, Vec _out, double scale){
 		/* Get all corners*/
 		if (m_DA == NULL)
 			std::cerr << "Da is null" << std::endl;
-		ierr = DAGetCorners(m_DA, &x, &y, &z, &m, &n, &p); CHKERRQ(ierr); 
+		ierr = DMDAGetCorners(m_DA, &x, &y, &z, &m, &n, &p); CHKERRQ(ierr); 
 		/* Get Info*/
-		ierr = DAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0); CHKERRQ(ierr); 
+		ierr = DMDAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0,0,0); CHKERRQ(ierr); 
 
 		if (x+m == mx) {
 			xne=m-1;
@@ -479,7 +480,7 @@ bool feMatrix<T>::MatVec(Vec _in, Vec _out, double scale){
 		preMatVec();
 
 		// Independent loop, loop through the nodes this processor owns..
-		for ( m_octDA->init<ot::DA::INDEPENDENT>(), m_octDA->init<ot::DA::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA::INDEPENDENT>(); m_octDA->next<ot::DA::INDEPENDENT>() ) {
+		for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
 			ElementalMatVec( m_octDA->curr(), in, out, scale); 
 		}//end INDEPENDENT
 
@@ -488,7 +489,7 @@ bool feMatrix<T>::MatVec(Vec _in, Vec _out, double scale){
 		m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
 
 		// Dependent loop ...
-		for ( m_octDA->init<ot::DA::DEPENDENT>(), m_octDA->init<ot::DA::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA::DEPENDENT>(); m_octDA->next<ot::DA::DEPENDENT>() ) {
+		for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
 			ElementalMatVec( m_octDA->curr(), in, out, scale); 
 		}//end DEPENDENT
 
@@ -531,9 +532,9 @@ bool feMatrix<T>::GetAssembledMatrix(Mat *J, MatType mtype) {
 		/* Get all corners*/
 		if (m_DA == NULL)
 			std::cerr << "Da is null" << std::endl;
-		ierr = DAGetCorners(m_DA, &x, &y, &z, &m, &n, &p); CHKERRQ(ierr); 
+		ierr = DMDAGetCorners(m_DA, &x, &y, &z, &m, &n, &p); CHKERRQ(ierr); 
 		/* Get Info*/
-		ierr = DAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0); CHKERRQ(ierr); 
+		ierr = DMDAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0,0,0); CHKERRQ(ierr); 
 
 		if (x+m == mx) {
 			xne=m-1;
@@ -616,7 +617,7 @@ bool feMatrix<T>::GetAssembledMatrix(Mat *J, MatType mtype) {
 
 		preMatVec();
 
-		for(m_octDA->init<ot::DA::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA::WRITABLE>();	m_octDA->next<ot::DA::WRITABLE>()) {
+		for(m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::WRITABLE>();	m_octDA->next<ot::DA_FLAGS::WRITABLE>()) {
 			GetElementalMatrix(m_octDA->curr(), records);	
 			if(records.size() > 500) {
 				m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
@@ -638,7 +639,7 @@ bool feMatrix<T>::GetAssembledMatrix(Mat *J, MatType mtype) {
 #undef __FUNCT__
 #define __FUNCT__ "alignElementAndVertices"
 template <typename T>
-PetscErrorCode feMatrix<T>::alignElementAndVertices(ot::DA * da, stdElemType & sType, ot::DA::index* indices) {
+PetscErrorCode feMatrix<T>::alignElementAndVertices(ot::DA * da, stdElemType & sType, unsigned int* indices) {
 	PetscFunctionBegin;
 
 	sType = ST_0;
@@ -668,9 +669,9 @@ PetscErrorCode feMatrix<T>::alignElementAndVertices(ot::DA * da, stdElemType & s
 #undef __FUNCT__
 #define __FUNCT__ "mapVtxAndFlagsToOrientation"
 template <typename T>
-PetscErrorCode feMatrix<T>::mapVtxAndFlagsToOrientation(int childNum, ot::DA::index* indices, unsigned char & mask) {
+PetscErrorCode feMatrix<T>::mapVtxAndFlagsToOrientation(int childNum, unsigned int* indices, unsigned char & mask) {
 	PetscFunctionBegin;
-	ot::DA::index tmp[8];
+	unsigned int tmp[8];
 	unsigned char tmpFlags = 0;
 	for (int i=0;i<8;i++) {
 		tmp[i] = indices[m_ucpLut[childNum][i]];
@@ -686,12 +687,12 @@ PetscErrorCode feMatrix<T>::mapVtxAndFlagsToOrientation(int childNum, ot::DA::in
 #undef __FUNCT__
 #define __FUNCT__ "reOrderIndices"
 template <typename T>
-PetscErrorCode feMatrix<T>::reOrderIndices(unsigned char eType, ot::DA::index* indices) {
+PetscErrorCode feMatrix<T>::reOrderIndices(unsigned char eType, unsigned int* indices) {
 #ifdef __DEBUG_1
 	std::cout << "Entering " << __func__ << std::endl;
 #endif
 	PetscFunctionBegin;
-	ot::DA::index tmp;
+	unsigned int tmp;
 	switch (eType) {
 	case  ET_N: 
 		break;

@@ -215,7 +215,7 @@ bool massMatrix::preMatVec() {
     // compute Hx
     int ierr;
     PetscInt mx,my,mz;
-    ierr = DAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0); CHKERRQ(ierr); 
+    ierr = DMDAGetInfo(m_DA,0, &mx, &my, &mz, 0,0, 0,0,0,0,0,0,0); CHKERRQ(ierr); 
 
     m_dHx = m_dLx/(mx -1);
     m_dHx = m_dHx*m_dHx*m_dHx;
@@ -247,7 +247,7 @@ bool massMatrix::ElementalMatVec(unsigned int i, PetscScalar *in, PetscScalar *o
   double fac = scale*hx*hy*hz/1728.0;
   
   stdElemType elemType;
-  ot::DA::index idx[8];
+  unsigned int idx[8];
   
   int ***Aijk = (int ***)m_stencil;
   
@@ -319,7 +319,7 @@ bool massMatrix::ElementalMatGetDiagonal(unsigned int i, PetscScalar *diag, doub
   double fac = scale*hx*hy*hz/1728.0;
   
   stdElemType elemType;
-  ot::DA::index idx[8];
+  unsigned int idx[8];
   
   int ***Aijk = (int ***)m_stencil;
   
