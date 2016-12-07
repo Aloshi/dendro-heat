@@ -29,6 +29,7 @@ static char help[] = "Driver for heat";
 #include "parabolic.h"
 #include "stiffnessMatrix.h"
 #include "VecIO.h"
+#include "rhs.h"
 
 int main(int argc, char **argv)
 {       
@@ -92,6 +93,7 @@ int main(int argc, char **argv)
                     1, 1, 0, 0, 0, &da) );
   massMatrix* Mass = new massMatrix(feMat::PETSC); // Mass Matrix
   stiffnessMatrix* Stiffness = new stiffnessMatrix(feMat::PETSC); // Stiffness matrix
+  forceVector* Force = new forceVector(feVec::PETSC);  // force term
 
   // create vectors 
   CHKERRQ( DMCreateGlobalVector(da, &rho) );
@@ -200,11 +202,16 @@ int main(int argc, char **argv)
   Stiffness->setDof(dof);
   Stiffness->setNuVec(rho);
 
+  Force->setProblemDimensions(1.0, 1.0, 1.0);
+  Force->setDA(da);
+  Force->setDof(dof);
+
   // Newmark time stepper ...
   parabolic *ts = new parabolic; 
 
   ts->setMassMatrix(Mass);
   ts->setStiffnessMatrix(Stiffness);
+  ts->setForceVector(Force);
   ts->setTimeFrames(1);
 
   ts->setInitialTemperature(initialTemperature);

@@ -2,7 +2,7 @@
 #define __FE_VECTOR_H_
 
 #include <string>
-#include "feVec.h"
+#include "feVector.h"
 #include "timeInfo.h"
 
 template <typename T>
@@ -393,9 +393,9 @@ bool feVector<T>::addVec(Vec _in, double scale, int indx){
     /* Get all corners*/
     if (m_DA == NULL)
       std::cerr << "Da is null" << std::endl;
-    ierr = DAGetCorners(m_DA, &x, &y, &z, &m, &n, &p); CHKERRQ(ierr); 
+    ierr = DMDAGetCorners(m_DA, &x, &y, &z, &m, &n, &p); CHKERRQ(ierr); 
     /* Get Info*/
-    ierr = DAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0); CHKERRQ(ierr); 
+    ierr = DMDAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0,0,0); CHKERRQ(ierr); 
 
     if (x+m == mx) {
       xne=m-1;
@@ -420,11 +420,11 @@ bool feVector<T>::addVec(Vec _in, double scale, int indx){
 	 std::cout << " norm of _in in feVector.cpp before adding force = " << norm << std::endl;
 #endif
 	 
-	 ierr = DAGetLocalVector(m_DA,&inlocal); CHKERRQ(ierr);
+	 ierr = DMGetLocalVector(m_DA,&inlocal); CHKERRQ(ierr);
 
 	 ierr = VecZeroEntries(inlocal); CHKERRQ(ierr);
 
-	 ierr = DAVecGetArray(m_DA,inlocal, &in);
+	 ierr = DMDAVecGetArray(m_DA,inlocal, &in);
 
     // Any derived class initializations ...
    // std::cout << __func__ << " -> preAddVec " << std::endl; 
@@ -444,12 +444,12 @@ bool feVector<T>::addVec(Vec _in, double scale, int indx){
     // std::cout << __func__ << " -> postAddVec " << std::endl;
     postAddVec();
 
-	 ierr = DAVecRestoreArray(m_DA, inlocal, &in);
+	 ierr = DMDAVecRestoreArray(m_DA, inlocal, &in);
 
-	 ierr = DALocalToGlobalBegin(m_DA,inlocal,_in); CHKERRQ(ierr);
-	 ierr = DALocalToGlobalEnd(m_DA,inlocal,_in); CHKERRQ(ierr);
+	 ierr = DMLocalToGlobalBegin(m_DA,inlocal,ADD_VALUES,_in); CHKERRQ(ierr);
+	 ierr = DMLocalToGlobalEnd(m_DA,inlocal,ADD_VALUES,_in); CHKERRQ(ierr);
 
-	 ierr = DARestoreLocalVector(m_DA,&inlocal); CHKERRQ(ierr);
+	 ierr = DMRestoreLocalVector(m_DA,&inlocal); CHKERRQ(ierr);
 
 #ifdef __DEBUG__
 	 VecNorm(_in, NORM_INFINITY, &norm);
@@ -476,7 +476,7 @@ bool feVector<T>::addVec(Vec _in, double scale, int indx){
     preAddVec();
 
     // Independent loop, loop through the nodes this processor owns..
-    for ( m_octDA->init<ot::DA::INDEPENDENT>(), m_octDA->init<ot::DA::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA::INDEPENDENT>(); m_octDA->next<ot::DA::INDEPENDENT>() ) {
+    for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
       ElementalAddVec( m_octDA->curr(), in, scale); 
     }//end INDEPENDENT
 
@@ -485,7 +485,7 @@ bool feVector<T>::addVec(Vec _in, double scale, int indx){
 	 m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
 	 
     // Dependent loop ...
-    for ( m_octDA->init<ot::DA::DEPENDENT>(), m_octDA->init<ot::DA::WRITABLE>();m_octDA->curr() < m_octDA->end<ot::DA::DEPENDENT>(); m_octDA->next<ot::DA::DEPENDENT>() ) {
+    for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>();m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
       ElementalAddVec( m_octDA->curr(), in, scale); 
     }//end DEPENDENT
 
@@ -537,13 +537,13 @@ bool feVector<T>::computeVec(Vec _in, Vec _out,double scale){
     if (m_DA == NULL)
       std::cerr << "Da is null" << std::endl;
 
-	 ierr = DAGetCorners(m_DA,&x,&y,&z,&m,&n,&p); CHKERRQ(ierr);
-	 ierr = DAVecGetArray(m_DA,_in,&in); CHKERRQ(ierr);
-	 ierr = DAVecGetArray(m_DA,_out,&out); CHKERRQ(ierr);
+	 ierr = DMDAGetCorners(m_DA,&x,&y,&z,&m,&n,&p); CHKERRQ(ierr);
+	 ierr = DMDAVecGetArray(m_DA,_in,&in); CHKERRQ(ierr);
+	 ierr = DMDAVecGetArray(m_DA,_out,&out); CHKERRQ(ierr);
     // Any derived class initializations ...
     preComputeVec();
 
-    // loop through all elements ...
+    // loop through all elements ...  // PROBABLY NODES
     for (int k=z; k<z+p; k++){
       for (int j=y; j<y+n; j++){
         for (int i=x; i<x+m; i++){
@@ -556,8 +556,8 @@ bool feVector<T>::computeVec(Vec _in, Vec _out,double scale){
     postComputeVec();
 
 
-	 ierr = DAVecRestoreArray(m_DA,_in,&in); CHKERRQ(ierr);
-	 ierr = DAVecRestoreArray(m_DA,_out,&out); CHKERRQ(ierr);
+	 ierr = DMDAVecRestoreArray(m_DA,_in,&in); CHKERRQ(ierr);
+	 ierr = DMDAVecRestoreArray(m_DA,_out,&out); CHKERRQ(ierr);
 
   } else {
     // loop for octree DA.
@@ -574,7 +574,7 @@ bool feVector<T>::computeVec(Vec _in, Vec _out,double scale){
     preAddVec();
 
     // Independent loop, loop through the nodes this processor owns..
-    for ( m_octDA->init<ot::DA::INDEPENDENT>(), m_octDA->init<ot::DA::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA::INDEPENDENT>(); m_octDA->next<ot::DA::INDEPENDENT>() ) {
+    for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
      ComputeNodalFunction(in, out,scale); 
     }//end INDEPENDENT
 

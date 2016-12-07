@@ -17,6 +17,7 @@
 #include "timeStepper.h"
 #include <sstream>
 #include "VecIO.h"
+#include "rhs.h"
 
 /**
  *	@brief Main class for a linear parabolic problem
@@ -146,11 +147,11 @@ int parabolic::solve()
       setRHS();
 
 
-#ifdef __DEBUG__
+//#ifdef __DEBUG__
       double norm;
       ierr = VecNorm(m_vecSolution,NORM_INFINITY,&norm); CHKERRQ(ierr);
       std::cout << "norm of the solution @ " << m_ti->current  << " = " << norm << std::endl;
-#endif
+//#endif
 
       // Solve the ksp using the current rhs and non-zero initial guess
       ierr = KSPSetInitialGuessNonzero(m_ksp,PETSC_TRUE); CHKERRQ(ierr);
@@ -196,6 +197,7 @@ void parabolic::jacobianMatMult(Vec In, Vec Out)
 {
   VecZeroEntries(Out); /* Clear to zeros*/
   //m_Damping->MatVec(In, Out); /* Matvec */
+  m_Mass->MatVec(In, Out);
   m_Stiffness->MatVec(In, Out, -m_ti->step); /* -dt factor for stiffness*/
   //m_Qtype->MatVec(In,Out,m_ti->step); /* dt factor for qtype matrix*/
 }
@@ -211,6 +213,9 @@ void parabolic::mgjacobianMatMult(DM da, Vec In, Vec Out){
 bool parabolic::setRHS()
 {
   VecZeroEntries(m_vecRHS);
+
+  ((forceVector*)m_Force)->setPrevTS(m_vecSolution);
+  m_Force->addVec(m_vecRHS);
   //m_Damping->MatVec(m_vecSolution,m_vecRHS); /* Set right hand side*/
   //m_Force->addVec(m_vecRHS,m_ti->step);  /* set Force term*/
   return true;
