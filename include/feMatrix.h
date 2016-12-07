@@ -303,14 +303,14 @@ bool feMatrix<T>::MatGetDiagonal(Vec _diag, double scale){
 			zne=p;
 		}
 
-		ierr = DAGetLocalVector(m_DA, &diagLocal); CHKERRQ(ierr);
+		ierr = DMGetLocalVector(m_DA, &diagLocal); CHKERRQ(ierr);
 		ierr = VecZeroEntries(diagLocal);
 
-		// ierr = DAGlobalToLocalBegin(m_DA, _diag, INSERT_VALUES, diagLocal); CHKERRQ(ierr);
-		// ierr = DAGlobalToLocalEnd(m_DA, _diag, INSERT_VALUES, diagLocal); CHKERRQ(ierr);
+		// ierr = DMGlobalToLocalBegin(m_DA, _diag, INSERT_VALUES, diagLocal); CHKERRQ(ierr);
+		// ierr = DMGlobalToLocalEnd(m_DA, _diag, INSERT_VALUES, diagLocal); CHKERRQ(ierr);
 
 
-		ierr = DAVecGetArray(m_DA, diagLocal, &diag);
+		ierr = DMDAVecGetArray(m_DA, diagLocal, &diag);
 
 		// Any derived class initializations ...
 		preMatVec();
@@ -326,13 +326,13 @@ bool feMatrix<T>::MatGetDiagonal(Vec _diag, double scale){
 
 		postMatVec();
 
-		ierr = DAVecRestoreArray(m_DA, diagLocal, &diag); CHKERRQ(ierr);  
+		ierr = DMDAVecRestoreArray(m_DA, diagLocal, &diag); CHKERRQ(ierr);  
 
 
-		ierr = DALocalToGlobalBegin(m_DA, diagLocal, _diag); CHKERRQ(ierr);  
-		ierr = DALocalToGlobalEnd(m_DA, diagLocal, _diag); CHKERRQ(ierr);  
+		ierr = DMLocalToGlobalBegin(m_DA, diagLocal, ADD_VALUES, _diag); CHKERRQ(ierr);  
+		ierr = DMLocalToGlobalEnd(m_DA, diagLocal, ADD_VALUES, _diag); CHKERRQ(ierr);  
 
-		ierr = DARestoreLocalVector(m_DA, &diagLocal); CHKERRQ(ierr);  
+		ierr = DMRestoreLocalVector(m_DA, &diagLocal); CHKERRQ(ierr);  
 
 
 	} else {
@@ -422,19 +422,19 @@ bool feMatrix<T>::MatVec(Vec _in, Vec _out, double scale){
 		// std::cout << x << "," << y << "," << z << " + " << xne <<","<<yne<<","<<zne<<std::endl;
 
 		// Get the local vector so that the ghost nodes can be accessed
-		ierr = DAGetLocalVector(m_DA, &inlocal); CHKERRQ(ierr);
-		ierr = DAGetLocalVector(m_DA, &outlocal); CHKERRQ(ierr);
+		ierr = DMGetLocalVector(m_DA, &inlocal); CHKERRQ(ierr);
+		ierr = DMGetLocalVector(m_DA, &outlocal); CHKERRQ(ierr);
 		// ierr = VecDuplicate(inlocal, &outlocal); CHKERRQ(ierr);
 
-		ierr = DAGlobalToLocalBegin(m_DA, _in, INSERT_VALUES, inlocal); CHKERRQ(ierr);
-		ierr = DAGlobalToLocalEnd(m_DA, _in, INSERT_VALUES, inlocal); CHKERRQ(ierr);
-		// ierr = DAGlobalToLocalBegin(m_DA, _out, INSERT_VALUES, outlocal); CHKERRQ(ierr);
-		// ierr = DAGlobalToLocalEnd(m_DA, _out, INSERT_VALUES, outlocal); CHKERRQ(ierr);
+		ierr = DMGlobalToLocalBegin(m_DA, _in, INSERT_VALUES, inlocal); CHKERRQ(ierr);
+		ierr = DMGlobalToLocalEnd(m_DA, _in, INSERT_VALUES, inlocal); CHKERRQ(ierr);
+		// ierr = DMGlobalToLocalBegin(m_DA, _out, INSERT_VALUES, outlocal); CHKERRQ(ierr);
+		// ierr = DMGlobalToLocalEnd(m_DA, _out, INSERT_VALUES, outlocal); CHKERRQ(ierr);
 
 		ierr = VecZeroEntries(outlocal);
 
-		ierr = DAVecGetArray(m_DA, inlocal, &in);
-		ierr = DAVecGetArray(m_DA, outlocal, &out);
+		ierr = DMDAVecGetArray(m_DA, inlocal, &in);
+		ierr = DMDAVecGetArray(m_DA, outlocal, &out);
 
 		// Any derived class initializations ...
 		preMatVec();
@@ -451,14 +451,14 @@ bool feMatrix<T>::MatVec(Vec _in, Vec _out, double scale){
 
 		postMatVec();
 
-		ierr = DAVecRestoreArray(m_DA, inlocal, &in); CHKERRQ(ierr);  
-		ierr = DAVecRestoreArray(m_DA, outlocal, &out); CHKERRQ(ierr);  
+		ierr = DMDAVecRestoreArray(m_DA, inlocal, &in); CHKERRQ(ierr);  
+		ierr = DMDAVecRestoreArray(m_DA, outlocal, &out); CHKERRQ(ierr);  
 
-		ierr = DALocalToGlobalBegin(m_DA, outlocal, _out); CHKERRQ(ierr);  
-		ierr = DALocalToGlobalEnd(m_DA, outlocal, _out); CHKERRQ(ierr);  
+		ierr = DMLocalToGlobalBegin(m_DA, outlocal, ADD_VALUES, _out); CHKERRQ(ierr);  
+		ierr = DMLocalToGlobalEnd(m_DA, outlocal, ADD_VALUES,_out); CHKERRQ(ierr);  
 
-		ierr = DARestoreLocalVector(m_DA, &inlocal); CHKERRQ(ierr);  
-		ierr = DARestoreLocalVector(m_DA, &outlocal); CHKERRQ(ierr);  
+		ierr = DMRestoreLocalVector(m_DA, &inlocal); CHKERRQ(ierr);  
+		ierr = DMRestoreLocalVector(m_DA, &outlocal); CHKERRQ(ierr);  
 		// ierr = VecDestroy(outlocal); CHKERRQ(ierr);  
 
 	} else {
@@ -554,7 +554,8 @@ bool feMatrix<T>::GetAssembledMatrix(Mat *J, MatType mtype) {
 
 		// Get the matrix from the DA ...
 		// DAGetMatrix(m_DA, mtype, &J); 
-		DAGetMatrix(m_DA, MATAIJ, &K);
+		//DMGetMatrix(m_DA, MATAIJ, &K);
+		DMCreateMatrix(m_DA, &K);
 
 		MatZeroEntries(K);
 
@@ -604,7 +605,7 @@ bool feMatrix<T>::GetAssembledMatrix(Mat *J, MatType mtype) {
 		}
 		// Octree part ...
 		char matType[30];
-		PetscTruth typeFound;
+		PetscBool typeFound;
 		PetscOptionsGetString(PETSC_NULL, "-fullJacMatType", matType, 30, &typeFound);
 		if(!typeFound) {
 			std::cout<<"I need a MatType for the full Jacobian matrix!"<<std::endl;

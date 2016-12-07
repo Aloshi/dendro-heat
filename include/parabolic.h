@@ -15,6 +15,8 @@
 #define _PARABOLIC_H_
 
 #include "timeStepper.h"
+#include <sstream>
+#include "VecIO.h"
 
 /**
  *	@brief Main class for a linear parabolic problem
@@ -67,9 +69,14 @@ class parabolic : public timeStepper //<parabolic>
 		return m_solVector;
 	 }
 
+  inline void setDAForMonitor(DM da) {
+    m_da = da;
+  }
+
  private:
   int m_inlevels;
   int m_iMon;
+  DM m_da;
   std::vector<Vec> m_solVector;
 };
 
@@ -98,7 +105,7 @@ int parabolic::init()
 
   // Create a KSP context to solve  @ every timestep
   ierr = KSPCreate(PETSC_COMM_WORLD,&m_ksp); CHKERRQ(ierr);
-  ierr = KSPSetOperators(m_ksp,m_matJacobian,m_matJacobian,DIFFERENT_NONZERO_PATTERN); CHKERRQ(ierr);
+  ierr = KSPSetOperators(m_ksp,m_matJacobian,m_matJacobian); CHKERRQ(ierr);
   ierr = KSPSetType(m_ksp,KSPCG); CHKERRQ(ierr);
   ierr = KSPSetFromOptions(m_ksp); CHKERRQ(ierr);
 
@@ -188,12 +195,13 @@ int parabolic::solve()
 void parabolic::jacobianMatMult(Vec In, Vec Out)
 {
   VecZeroEntries(Out); /* Clear to zeros*/
-  m_Damping->MatVec(In, Out); /* Matvec */
+  //m_Damping->MatVec(In, Out); /* Matvec */
   m_Stiffness->MatVec(In, Out, -m_ti->step); /* -dt factor for stiffness*/
-  m_Qtype->MatVec(In,Out,m_ti->step); /* dt factor for qtype matrix*/
+  //m_Qtype->MatVec(In,Out,m_ti->step); /* dt factor for qtype matrix*/
 }
 
 void parabolic::mgjacobianMatMult(DM da, Vec In, Vec Out){
+  assert(false);
 }
 /**
  *	@brief Set right hand side used in stepping at every time step
@@ -203,8 +211,8 @@ void parabolic::mgjacobianMatMult(DM da, Vec In, Vec Out){
 bool parabolic::setRHS()
 {
   VecZeroEntries(m_vecRHS);
-  m_Damping->MatVec(m_vecSolution,m_vecRHS); /* Set right hand side*/
-  m_Force->addVec(m_vecRHS,m_ti->step);  /* set Force term*/
+  //m_Damping->MatVec(m_vecSolution,m_vecRHS); /* Set right hand side*/
+  //m_Force->addVec(m_vecRHS,m_ti->step);  /* set Force term*/
   return true;
 }
 
@@ -228,6 +236,17 @@ int parabolic::monitor()
 #endif
 		ierr = VecCopy(m_vecSolution,tempSol); CHKERRQ(ierr);
 		m_solVector.push_back(tempSol);
+
+    std::stringstream ss;
+    ss << "timestep_" << m_ti->currentstep << ".plt";
+    write_vector(ss.str().c_str(), m_vecSolution, m_da);
+
+    /*PetscViewer view;
+    PetscViewerCreate(PETSC_COMM_WORLD, &view);
+    PetscViewerPushFormat(view, PETSC_VIEWER_ASCII_MATLAB); 
+    PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &view);
+    VecView(m_vecSolution, view);
+    PetscViewerDestroy(&view);*/
 
 #ifdef __DEBUG__
 		//		VecNorm(m_solVector[m_solVector.size()-1],NORM_INFINITY,&norm);

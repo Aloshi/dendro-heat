@@ -11,10 +11,10 @@ SOURCES = main.cpp timeStepper.cpp
 EXECUTABLE = dendroHeat
 
 CXX = g++
-CXX_FLAGS += -std=c++11
+CXX_FLAGS += -std=c++11 -fopenmp
 
 INCLUDES = -I./include -I$(DENDRO_DIR)/include -I$(DENDRO_DIR)/include/oda -I$(DENDRO_DIR)/include/fem -I$(DENDRO_DIR)/include/omg -I$(DENDRO_DIR)/build $(PETSC_CC_INCLUDES)
-LIBS = -L$(DENDRO_DIR)/build -ldendro -ldendroDA -ldendroMG $(PETSC_LIB)
+LIBS = $(PETSC_LIB) -L$(DENDRO_DIR)/build -ldendroDA -ldendro
 
 # Generate the list of object files by replacing suffixes in SOURCES (e.g. main.cpp -> main.o).
 OBJECTS = $(SOURCES:.cpp=.o)

@@ -1,5 +1,7 @@
 static char help[] = "Driver for heat";
 
+#include "externVars.h"
+#include "dendro.h"
 #include "mpi.h"
 #include <iostream>
 #include <fstream>
@@ -26,6 +28,7 @@ static char help[] = "Driver for heat";
 #include "massMatrix.h"
 #include "parabolic.h"
 #include "stiffnessMatrix.h"
+#include "VecIO.h"
 
 int main(int argc, char **argv)
 {       
@@ -36,14 +39,14 @@ int main(int argc, char **argv)
 
 
   int Ns = 32;
-  unsigned int dof = 3;
+  unsigned int dof = 1;
 
   char problemName[PETSC_MAX_PATH_LEN];
   char filename[PETSC_MAX_PATH_LEN];
 
   double t0 = 0.0;
-  double dt = 0.1;
-  double t1 = 1.0;
+  double dt = 0.001;
+  double t1 = 0.01;
 
   // double dtratio = 1.0;
   DM  da;         // Underlying scalar DA - for scalar properties
@@ -55,10 +58,9 @@ int main(int argc, char **argv)
 
   timeInfo ti;
 
-  PetscTruth mf = PETSC_FALSE;
+  PetscBool mf = PETSC_FALSE;
   bool mfree = false;
-
-  PetscOptionsGetTruth(0, "-mfree", &mf, 0);
+  PetscOptionsGetBool(0, "-mfree", &mf, 0);
   
   if (mf == PETSC_TRUE) {
     mfree = true;
@@ -70,7 +72,7 @@ int main(int argc, char **argv)
   CHKERRQ ( PetscOptionsGetScalar(0,"-t0",&t0,0) );
   CHKERRQ ( PetscOptionsGetScalar(0,"-t1",&t1,0) );
   CHKERRQ ( PetscOptionsGetScalar(0,"-dt",&dt,0) );
-  CHKERRQ ( PetscOptionsGetString(PETSC_NULL,"-pn",problemName,PETSC_MAX_PATH_LEN-1,PETSC_NULL));
+  CHKERRQ ( PetscOptionsGetString(PETSC_NULL, "-pn",problemName,PETSC_MAX_PATH_LEN-1,PETSC_NULL));
 
   // Time info for timestepping
   ti.start = t0;
@@ -82,16 +84,19 @@ int main(int argc, char **argv)
   }
 
   // create DA
-  CHKERRQ ( DACreate3d ( PETSC_COMM_WORLD, DA_NONPERIODIC, DA_STENCIL_BOX, 
+  /*CHKERRQ ( DMDACreate3d ( PETSC_COMM_WORLD, DMDA_NONPERIODIC, DMDA_STENCIL_BOX, 
+                    Ns+1, Ns+1, Ns+1, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE,
+                    1, 1, 0, 0, 0, &da) );*/
+  CHKERRQ ( DMDACreate3d ( PETSC_COMM_WORLD, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DMDA_STENCIL_BOX, 
                     Ns+1, Ns+1, Ns+1, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE,
                     1, 1, 0, 0, 0, &da) );
-  elasMass *Mass = new massMatrix(feMat::PETSC); // Mass Matrix
-  elasStiffness *Stiffness = new stiffnessMatrix(feMat::PETSC); // Stiffness matrix
+  massMatrix* Mass = new massMatrix(feMat::PETSC); // Mass Matrix
+  stiffnessMatrix* Stiffness = new stiffnessMatrix(feMat::PETSC); // Stiffness matrix
 
   // create vectors 
-  CHKERRQ( DMDACreateGlobalVector(da, &rho) );
+  CHKERRQ( DMCreateGlobalVector(da, &rho) );
 
-  CHKERRQ( DMDACreateGlobalVector(da, &initialTemperature) );
+  CHKERRQ( DMCreateGlobalVector(da, &initialTemperature) );
 
   // Set initial conditions
   CHKERRQ( VecSet ( initialTemperature, 0.0) ); 
@@ -152,8 +157,9 @@ int main(int argc, char **argv)
   for (int k=z; k < z+p; k++) {
     for (int j=y; j < y+n; j++) {
       for (int i=x; i < x+m; i++) {
-        double coords[3] = { hx*i, hx*j, hx*z };
+        double coords[3] = { hx*i, hx*j, hx*k };
         double ic = sin(M_PI * coords[0]) * sin(M_PI * coords[1]) * sin(M_PI * coords[2]);
+        //std::cout << "ic at " << coords[0] << ", " << coords[1] << ", " << coords[2] << ": " << ic << "\n";
 
         initialTemperatureArray[k][j][i] = ic;
         rhoArray[k][j][i] = 1.0;
@@ -166,40 +172,47 @@ int main(int argc, char **argv)
   CHKERRQ( DMDAVecRestoreArray ( da, initialTemperature, &initialTemperatureArray ) );
   CHKERRQ( DMDAVecRestoreArray ( da, rho, &rhoArray ) );
 
-  // std::cout << "Finished restoring arrays" << std::endl; 
-  
+/*{
+    std::stringstream ss;
+    ss << "ic.m";
 
-  std::cout << "Numsteps is " << numSteps << std::endl;
-  
+    PetscViewer view;
+    PetscViewerCreate(PETSC_COMM_WORLD, &view);
+    PetscViewerPushFormat(view, PETSC_VIEWER_ASCII_MATLAB); 
+    PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &view);
+    VecView(initialTemperature, view);
+    PetscViewerDestroy(&view);
+}*/
+  write_vector("ic.plt", initialTemperature, da);
+ 
   // DONE - SET MATERIAL PROPERTIES ...
 
   unsigned int numSteps = (unsigned int)(ceil(( ti.stop - ti.start)/ti.step));
+  std::cout << "Numsteps is " << numSteps << std::endl;
 
   // Setup Matrices and Force Vector ...
   Mass->setProblemDimensions(1.0, 1.0, 1.0);
-  Mass->setDA(da3d);
+  Mass->setDA(da);
   Mass->setDof(dof);
-  Mass->setDensity(rho);
 
   Stiffness->setProblemDimensions(1.0, 1.0, 1.0);
-  Stiffness->setDA(da3d);
+  Stiffness->setDA(da);
   Stiffness->setDof(dof);
-  Stiffness->setLame(lambda, mu);
+  Stiffness->setNuVec(rho);
 
   // Newmark time stepper ...
   parabolic *ts = new parabolic; 
 
   ts->setMassMatrix(Mass);
   ts->setStiffnessMatrix(Stiffness);
-  ts->damp(false);
   ts->setTimeFrames(1);
-  ts->storeVec(false);
 
   ts->setInitialTemperature(initialTemperature);
 
   ts->setTimeInfo(&ti);
   ts->setAdjoint(false); // set if adjoint or forward
-  ts->useMatrixFree(mfree);
+  ts->setDAForMonitor(da);
+  //ts->useMatrixFree(mfree);
 
   if (!rank)
     std::cout <<"Initializing parabolic"<< std::endl;
@@ -217,6 +230,8 @@ int main(int argc, char **argv)
 		std::cout << "Total time for init is " << stime - itime << std::endl;
     std::cout << "Total time for solve is " << etime - stime << std::endl;
   }
+
+
 
   PetscFinalize();
 }

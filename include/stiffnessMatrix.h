@@ -210,7 +210,7 @@ bool stiffnessMatrix::preMatVec() {
 	 // int ierr;
 	 // ierr = VecNorm(nuvec,NORM_INFINITY,&m_nuval); CHKERRQ(ierr);
 
-    int ierr = DAVecGetArray(m_DA, nuvec, &nuarray);
+    int ierr = DMDAVecGetArray(m_DA, nuvec, &nuarray);
 
     m_nuarray = nuarray;
     // compute Hx
@@ -327,7 +327,7 @@ bool stiffnessMatrix::GetElementalMatrix(unsigned int idx, std::vector<ot::MatRe
 bool stiffnessMatrix::postMatVec() {
   if ( m_daType == PETSC) {
 	 PetscScalar ***nuarray = (PetscScalar ***)m_nuarray;
-    int ierr = DAVecRestoreArray(m_DA, nuvec, &nuarray);
+    int ierr = DMDAVecRestoreArray(m_DA, nuvec, &nuarray);
     CHKERRQ(ierr);
   } else {
     PetscScalar *nuarray = (PetscScalar *)m_nuarray;
