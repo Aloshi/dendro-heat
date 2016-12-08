@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 2.8)
 project(dendro)
 
-# version number
 set (DENDRO_DIR /home/lofquist/Dendro4)
+set (TALYFEM_DIR /home/lofquist/taly_fem)
+set (LIBCONFIG_DIR /home/lofquist/LIBS/libconfig-1.5/install)
+
+# version number
 set (Dendro_VERSION_MAJOR 4)
 set (Dendro_VERSION_MINOR 0)
 
@@ -33,7 +36,6 @@ if(MPI_LINK_FLAGS)
 endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g")
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99")
 set(LINK_FLAGS "${LINK_FLAGS} -rdynamic")
 
 # Options
@@ -51,11 +53,15 @@ include_directories(${PROJECT_BINARY_DIR}
                     ${DENDRO_DIR}/examples/include
                     $ENV{PETSC_DIR}/include
                     $ENV{PETSC_DIR}/$ENV{PETSC_ARCH}/include
+                    ${TALYFEM_DIR}
+                    ${LIBCONFIG_DIR}/include
                     )
 
 link_directories($ENV{PETSC_DIR}/$ENV{PETSC_ARCH}/lib
                  $ENV{PAPI_LIB}
                  ${DENDRO_DIR}/build 
+                 ${TALYFEM_DIR}
+                 ${LIBCONFIG_DIR}/lib
         )
 
 # Sources
@@ -66,4 +72,4 @@ link_directories($ENV{PETSC_DIR}/$ENV{PETSC_ARCH}/lib
 ##  Helper APPS
 ##---------------------------------------------------------------------------------------
 add_executable(dendroHeat src/main.cpp src/timeStepper.cpp src/TecplotIO_ascii.cpp src/VecIO.cpp src/DendroIO.cpp src/femUtils.cpp)
-target_link_libraries(dendroHeat dendro dendroDA petsc ${MPI_LIBRARIES} m)
+target_link_libraries(dendroHeat dendro dendroDA petsc talyfem parmetis config++ ${MPI_LIBRARIES} m)

@@ -34,6 +34,9 @@ static char help[] = "Driver for heat";
 #include "rhs.h"
 #include "DendroIO.h"
 
+#include "TalyMat.h"
+#include "HTEquation.h"
+
 float uniform() {
   return float(rand()) / RAND_MAX; // [0,1)
 }
@@ -289,6 +292,8 @@ int main(int argc, char **argv)
   Force->setProblemDimensions(1.0, 1.0, 1.0);
   Force->setDA(&da);
   Force->setDof(dof);
+
+  TalyMatrix<HTEquation, HTNodeData> test;
 
   // time stepper ...
   parabolic *ts = new parabolic; 
