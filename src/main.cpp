@@ -1,6 +1,6 @@
 static char help[] = "Driver for heat";
 
-#include "externVars.h"
+#include "externVars.h"  // must be included or many linker errors will occur
 #include "dendro.h"
 #include "mpi.h"
 #include <iostream>
@@ -15,6 +15,8 @@ static char help[] = "Driver for heat";
 //#include "omg.h"
 
 #include "timeInfo.h"
+#include "hcurvedata.h"
+#include "femUtils.h"
 //#include "feMatrix.h"
 //#include "feVector.h"
 //#include "femUtils.h"
@@ -30,14 +32,76 @@ static char help[] = "Driver for heat";
 #include "stiffnessMatrix.h"
 #include "VecIO.h"
 #include "rhs.h"
+#include "DendroIO.h"
+
+float uniform() {
+  return float(rand()) / RAND_MAX; // [0,1)
+}
+
+double gaussian(double mean = 0.5, double std_deviation = 0.1) {
+  static double t = 0;
+  double x1, x2, r;
+
+  // reuse previous calculations
+  if (t) {
+    const double tmp = t;
+    t = 0;
+    return mean + std_deviation * tmp;
+  }
+
+  // pick randomly a point inside the unit disk
+  do {
+    x1 = 2 * uniform() - 1;
+    x2 = 2 * uniform() - 1;
+    r = x1 * x1 + x2 * x2;
+  } while (r >= 1);
+
+  // Box-Muller transform
+  r = sqrt(-2.0 * log(r) / r);
+
+  // save for next call
+  t = r * x2;
+
+  // only use one of the coordinates of a bivariate distribution
+  return mean + std_deviation * r * x1;
+}
+
+std::vector<double> genPoints(int n_pts, double mean = 0.5, double dev = 0.1)
+{
+  std::vector<double> pts;
+  pts.reserve(n_pts*3);
+  for (int i = 0; i < n_pts * 3; i++) {
+    pts.push_back(gaussian(mean, dev));
+  }
+  return pts;
+}
+
+std::vector<ot::TreeNode> buildOct()
+{
+  int n_pts = 20*20*20;
+  std::vector<double> pts = genPoints(n_pts);
+  double gSize[3] = {1.0, 1.0, 1.0};
+  int dim = 3;
+  int maxOctDepth = 8;
+  int maxPtsPerOctant = 1;
+  bool incCorner = true;
+
+  std::vector<ot::TreeNode> linOct, balOct, newLinOct;
+
+  ot::points2Octree(pts, gSize, linOct, dim, maxOctDepth, maxPtsPerOctant, MPI_COMM_WORLD);
+  par::sampleSort<ot::TreeNode>(linOct, newLinOct, MPI_COMM_WORLD);
+  ot::balanceOctree (newLinOct, balOct, dim, maxOctDepth, incCorner, MPI_COMM_WORLD);
+
+  return balOct;
+}
 
 int main(int argc, char **argv)
 {       
   PetscInitialize(&argc, &argv, "ht.opt", help);
+  _InitializeHcurve(3);
 
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
 
   int Ns = 32;
   unsigned int dof = 1;
@@ -49,13 +113,12 @@ int main(int argc, char **argv)
   double dt = 0.001;
   double t1 = 0.01;
 
-  // double dtratio = 1.0;
-  DM  da;         // Underlying scalar DA - for scalar properties
-
+  //DM  da;         // Underlying scalar DA - for scalar properties
   Vec rho;        // density - elemental scalar
 
   // Initial conditions
   Vec initialTemperature; 
+  Vec elementalTemp;  // hack since we can't loop over nodes, gets interpolated onto nodes later
 
   timeInfo ti;
 
@@ -80,32 +143,72 @@ int main(int argc, char **argv)
   ti.stop  = t1;
   ti.step  = dt;
 
-  if (!rank) {
+  /*if (!rank) {
     std::cout << "Grid size is " << Ns+1 << " and NT is " << (int)ceil(1.0/dt) << std::endl;
-  }
+  }*/
+
+  
 
   // create DA
-  /*CHKERRQ ( DMDACreate3d ( PETSC_COMM_WORLD, DMDA_NONPERIODIC, DMDA_STENCIL_BOX, 
+  /*CHKERRQ ( DMDACreate3d ( PETSC_COMM_WORLD, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DMDA_STENCIL_BOX, 
                     Ns+1, Ns+1, Ns+1, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE,
                     1, 1, 0, 0, 0, &da) );*/
-  CHKERRQ ( DMDACreate3d ( PETSC_COMM_WORLD, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DMDA_STENCIL_BOX, 
-                    Ns+1, Ns+1, Ns+1, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE,
-                    1, 1, 0, 0, 0, &da) );
-  massMatrix* Mass = new massMatrix(feMat::PETSC); // Mass Matrix
-  stiffnessMatrix* Stiffness = new stiffnessMatrix(feMat::PETSC); // Stiffness matrix
-  forceVector* Force = new forceVector(feVec::PETSC);  // force term
+  auto oct = buildOct();
+  auto octCopy = oct;
+  std::cout << "Created oct tree\n";
+  std::cout << "oct.size(): " << oct.size() << "\n";
+  ot::DA da (oct, PETSC_COMM_WORLD, PETSC_COMM_WORLD, 0.3);
+  std::cout << "Created DA\n";
+
+  MPI_Barrier(PETSC_COMM_WORLD);
+  massMatrix* Mass = new massMatrix(feMat::OCT); // Mass Matrix
+  stiffnessMatrix* Stiffness = new stiffnessMatrix(feMat::OCT); // Stiffness matrix
+  forceVector* Force = new forceVector(feVec::OCT);  // force term
 
   // create vectors 
-  CHKERRQ( DMCreateGlobalVector(da, &rho) );
-
-  CHKERRQ( DMCreateGlobalVector(da, &initialTemperature) );
+  da.createVector(rho, true, false, 1);  // args??
+  da.createVector(initialTemperature, false, true, 1);
+  da.createVector(elementalTemp, true, true, 1);
+  //CHKERRQ( DMCreateGlobalVector(da, &rho) );
+  //CHKERRQ( DMCreateGlobalVector(da, &initialTemperature) );
 
   // Set initial conditions
   CHKERRQ( VecSet ( initialTemperature, 0.0) ); 
+  CHKERRQ( VecSet ( rho, 1.0 ) );
+  CHKERRQ( VecZeroEntries(elementalTemp) );
 
-  VecZeroEntries( rho );
+  PetscScalar *elemInitTempArray;
+  da.vecGetBuffer(elementalTemp, elemInitTempArray, true, true, false, dof);
 
-  int x, y, z, m, n, p;
+  int maxD = da.getMaxDepth();
+  double hx = 1.0 / ((double)(1 << (maxD-1)));
+  for ( da.init<ot::DA_FLAGS::ALL>(), da.init<ot::DA_FLAGS::WRITABLE>(); da.curr() < da.end<ot::DA_FLAGS::ALL>(); da.next<ot::DA_FLAGS::ALL>()) {
+    unsigned int i = da.curr();
+    unsigned int lev = da.getLevel(i);
+    unsigned int half = ((1 << (maxD - lev))) / 2;
+
+    Point pt = da.getCurrentOffset();
+    double coords[3] = { (pt.x() + half) * hx, (pt.y() + half) * hx, (pt.z() + half) * hx };
+    std::cout << "elem " << i << ": " << coords[0] << ", " << coords[1] << ", " << coords[2] << "\n";
+    elemInitTempArray[i] = sin(M_PI * coords[0]) * sin(M_PI * coords[1]) * sin(M_PI * coords[2]);
+  }
+
+  da.vecRestoreBuffer(elementalTemp, elemInitTempArray, true, true, false, dof);
+
+  elementToNode(da, elementalTemp, initialTemperature, dof);
+
+  // print IC
+{
+  PetscScalar* data;
+  //da.vecGetBuffer(initialTemperature, data, false, false, true, dof);
+  da.vecGetBuffer(elementalTemp, data, true, false, true, dof);
+  octree2VTK(da, rank, data, "ic.plt");
+  //da.vecRestoreBuffer(initialTemperature, data, false, false, true, dof);
+  da.vecRestoreBuffer(elementalTemp, data, true, false, true, dof);
+}
+
+
+  /*int x, y, z, m, n, p;
   int mx,my,mz, xne, yne, zne;
 
   CHKERRQ( DMDAGetCorners(da, &x, &y, &z, &m, &n, &p) ); 
@@ -138,15 +241,6 @@ int main(int argc, char **argv)
   std::cout << "Elem size is " << elemSize << std::endl;
   unsigned int nodeSize = (Ns+1)*(Ns+1)*(Ns+1);  // number of nodes
 
-  /*unsigned char *tmp_mat = new unsigned char[elemSize];
-  double *tmp_tau = new double[dof*elemSize];
-
-  // generate filenames & read in the raw arrays first ...
-  std::ifstream fin;
-
-  sprintf(filename, "%s.%d.img", problemName, Ns); 
-  fin.open(filename, std::ios::binary); fin.read((char *)tmp_mat, elemSize); fin.close();*/
-  
   // Set Elemental material properties
   PetscScalar ***initialTemperatureArray, ***rhoArray;
 
@@ -173,19 +267,9 @@ int main(int argc, char **argv)
 
   CHKERRQ( DMDAVecRestoreArray ( da, initialTemperature, &initialTemperatureArray ) );
   CHKERRQ( DMDAVecRestoreArray ( da, rho, &rhoArray ) );
+  */
 
-/*{
-    std::stringstream ss;
-    ss << "ic.m";
-
-    PetscViewer view;
-    PetscViewerCreate(PETSC_COMM_WORLD, &view);
-    PetscViewerPushFormat(view, PETSC_VIEWER_ASCII_MATLAB); 
-    PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &view);
-    VecView(initialTemperature, view);
-    PetscViewerDestroy(&view);
-}*/
-  write_vector("ic.plt", initialTemperature, da);
+  //write_vector("ic.plt", initialTemperature, da);
  
   // DONE - SET MATERIAL PROPERTIES ...
 
@@ -194,19 +278,19 @@ int main(int argc, char **argv)
 
   // Setup Matrices and Force Vector ...
   Mass->setProblemDimensions(1.0, 1.0, 1.0);
-  Mass->setDA(da);
+  Mass->setDA(&da);
   Mass->setDof(dof);
 
   Stiffness->setProblemDimensions(1.0, 1.0, 1.0);
-  Stiffness->setDA(da);
+  Stiffness->setDA(&da);
   Stiffness->setDof(dof);
   Stiffness->setNuVec(rho);
 
   Force->setProblemDimensions(1.0, 1.0, 1.0);
-  Force->setDA(da);
+  Force->setDA(&da);
   Force->setDof(dof);
 
-  // Newmark time stepper ...
+  // time stepper ...
   parabolic *ts = new parabolic; 
 
   ts->setMassMatrix(Mass);
@@ -218,7 +302,6 @@ int main(int argc, char **argv)
 
   ts->setTimeInfo(&ti);
   ts->setAdjoint(false); // set if adjoint or forward
-  ts->setDAForMonitor(da);
   //ts->useMatrixFree(mfree);
 
   if (!rank)
@@ -237,8 +320,6 @@ int main(int argc, char **argv)
 		std::cout << "Total time for init is " << stime - itime << std::endl;
     std::cout << "Total time for solve is " << etime - stime << std::endl;
   }
-
-
 
   PetscFinalize();
 }

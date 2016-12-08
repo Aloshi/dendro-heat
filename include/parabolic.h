@@ -70,14 +70,9 @@ class parabolic : public timeStepper //<parabolic>
 		return m_solVector;
 	 }
 
-  inline void setDAForMonitor(DM da) {
-    m_da = da;
-  }
-
  private:
   int m_inlevels;
   int m_iMon;
-  DM m_da;
   std::vector<Vec> m_solVector;
 };
 
@@ -242,9 +237,10 @@ int parabolic::monitor()
 		ierr = VecCopy(m_vecSolution,tempSol); CHKERRQ(ierr);
 		m_solVector.push_back(tempSol);
 
-    std::stringstream ss;
+/*    std::stringstream ss;
     ss << "timestep_" << m_ti->currentstep << ".plt";
     write_vector(ss.str().c_str(), m_vecSolution, m_da);
+*/
 
     /*PetscViewer view;
     PetscViewerCreate(PETSC_COMM_WORLD, &view);

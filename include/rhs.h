@@ -9,7 +9,7 @@ class forceVector : public feVector<forceVector>
   public:
   forceVector(daType da);
 
-  inline bool ElementalAddVec(unsigned int index, PetscScalar *in, double scale) { assert(false); }
+  inline bool ElementalAddVec(unsigned int index, PetscScalar *in, double scale);
   inline bool ElementalAddVec(int i, int j, int k, PetscScalar ***in, double scale);
     inline bool initStencils();
 
@@ -22,7 +22,7 @@ class forceVector : public feVector<forceVector>
 
    private:
     Vec m_prevTSVec;
-    PetscScalar*** m_prevTSArray;
+    void* m_prevTSArray;
 
     double 		m_dHx;
     double xFac, yFac, zFac;
@@ -180,11 +180,12 @@ bool forceVector::preAddVec() {
     m_dHx /= 1728.0;
     CHKERRQ(ierr);
 
-    ierr = DMDAVecGetArray(m_DA, m_prevTSVec, &m_prevTSArray);
+    PetscScalar*** arr;
+    ierr = DMDAVecGetArray(m_DA, m_prevTSVec, &arr);
+    m_prevTSArray = arr;
     CHKERRQ(ierr);
   } else {
     maxD = m_octDA->getMaxDepth();
-
     
     // Get the  x,y,z factors 
     xFac = 1.0/((double)(1<<(maxD-1)));
@@ -194,6 +195,10 @@ bool forceVector::preAddVec() {
         zFac = 1.0/((double)(1<<(maxD-1)));
       }
     }
+
+    PetscScalar* arr;
+    m_octDA->vecGetBuffer(m_prevTSVec, arr, false, true, false, m_uiDof);
+    m_prevTSArray = arr;
   }
 
   return true;
@@ -225,6 +230,29 @@ bool massMatrix::ElementalMatVec(unsigned int i, PetscScalar *in, PetscScalar *o
   return true;
 }*/
 
+bool forceVector::ElementalAddVec(unsigned int i, PetscScalar *out, double scale) {
+  unsigned int lev = m_octDA->getLevel(i);
+  double hx = xFac*(1<<(maxD - lev));
+  double hy = yFac*(1<<(maxD - lev));
+  double hz = zFac*(1<<(maxD - lev));
+
+  double fac = scale*hx*hy*hz/1728.0;
+  
+  stdElemType elemType;
+  unsigned int idx[8];
+  
+  int ***Aijk = (int ***)m_stencil;
+  
+  alignElementAndVertices(m_octDA, elemType, idx);       
+  
+  PetscScalar* in = (PetscScalar*) m_prevTSArray;
+  for (int k = 0;k < 8;k++) {
+    for (int j=0;j<8;j++) {
+      out[m_uiDof*idx[k]] += fac*(Aijk[elemType][k][j])*in[m_uiDof*idx[j]];
+    }//end for j
+  }//end for k
+}
+
 bool forceVector::ElementalAddVec(int i, int j, int k, PetscScalar ***out, double scale) {
   int dof= m_uiDof;
   int idx[8][3]={
@@ -240,7 +268,7 @@ bool forceVector::ElementalAddVec(int i, int j, int k, PetscScalar ***out, doubl
 
   double stencilScale =  m_dHx*scale;
   int **Ajk = (int **)m_stencil;
-  PetscScalar*** in = m_prevTSArray;
+  PetscScalar*** in = (PetscScalar***) m_prevTSArray;
   /*for (int r = 0; r < 8; r++) {
     std::cout << "Element " << i << ", " << j << ", " << k << " in[" << r << "] = " << in[idx[r][0]][idx[r][1]][idx[r][2]] << "\n";
   }*/
@@ -256,8 +284,16 @@ bool forceVector::ElementalAddVec(int i, int j, int k, PetscScalar ***out, doubl
 }
 
 bool forceVector::postAddVec() {
-  int ierr = DMDAVecRestoreArray(m_DA, m_prevTSVec, &m_prevTSArray);
-  CHKERRQ(ierr);
+  if (m_daType == PETSC) {
+    PetscScalar*** arr = (PetscScalar***) m_prevTSArray;
+    int ierr = DMDAVecRestoreArray(m_DA, m_prevTSVec, &arr);
+    CHKERRQ(ierr);
+  } else {
+    PetscScalar* arr = (PetscScalar*) m_prevTSArray;
+    int ierr = m_octDA->vecRestoreBuffer(m_prevTSVec, arr, false,true,false,m_uiDof);
+    CHKERRQ(ierr);
+  }
+  m_prevTSArray = NULL;
   return true;
 }
 

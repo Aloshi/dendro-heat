@@ -65,5 +65,5 @@ link_directories($ENV{PETSC_DIR}/$ENV{PETSC_ARCH}/lib
 ##---------------------------------------------------------------------------------------
 ##  Helper APPS
 ##---------------------------------------------------------------------------------------
-add_executable(dendroHeat src/main.cpp src/timeStepper.cpp src/TecplotIO_ascii.cpp src/VecIO.cpp)
+add_executable(dendroHeat src/main.cpp src/timeStepper.cpp src/TecplotIO_ascii.cpp src/VecIO.cpp src/DendroIO.cpp src/femUtils.cpp)
 target_link_libraries(dendroHeat dendro dendroDA petsc ${MPI_LIBRARIES} m)

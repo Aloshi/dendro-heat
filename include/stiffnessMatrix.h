@@ -224,7 +224,7 @@ bool stiffnessMatrix::preMatVec() {
   } else {
     PetscScalar *nuarray; 
     // Get nuarray
-    m_octDA->vecGetBuffer(nuvec, nuarray, false, false, true,m_uiDof);
+    m_octDA->vecGetBuffer(nuvec, nuarray, true, false, true,m_uiDof);
     m_nuarray = nuarray;
 
     // compute Hx
@@ -265,7 +265,7 @@ bool stiffnessMatrix::ElementalMatVec(unsigned int i, PetscScalar *in, PetscScal
   PetscScalar *nuarray = (PetscScalar *)m_nuarray;
   for (int k = 0;k < 8;k++) {
     for (int j=0;j<8;j++) {
-		double fac1 = nuarray[idx[k]]*fac11;
+		double fac1 = nuarray[i]*fac11;
       out[m_uiDof*idx[k]] +=  (fac1*(Aijk[elemType][k][j]))*in[m_uiDof*idx[j]];
 		
       // if(hangingMask) std::cout << fac1*Aijk[elemType][k][j] << " " ;
@@ -298,8 +298,8 @@ bool stiffnessMatrix::ElementalMatVec(int i, int j, int k, PetscScalar ***in, Pe
     for (int r = 0; r < 8; r++) {
       stencilScale = -(nuarray[k][j][i]*m_dHx)*scale;
       out[idx[q][0]][idx[q][1]][idx[q][2]] +=  stencilScale*Ajk[q][r]*in[idx[r][0]][idx[r][1]][idx[r][2]];
-      if (dof > 1)	
-        out[idx[q][0]][idx[q][1]][idx[q][2]+1] += 0.0;
+      //if (dof > 1)	
+      //  out[idx[q][0]][idx[q][1]][idx[q][2]+1] += 0.0;
     }
   }
   return true;
@@ -331,7 +331,7 @@ bool stiffnessMatrix::postMatVec() {
     CHKERRQ(ierr);
   } else {
     PetscScalar *nuarray = (PetscScalar *)m_nuarray;
-    m_octDA->vecRestoreBuffer(nuvec, nuarray, false, false, true,m_uiDof);
+    m_octDA->vecRestoreBuffer(nuvec, nuarray, true, false, true,m_uiDof);
   }
 
   return true;
