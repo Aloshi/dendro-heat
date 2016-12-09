@@ -28,20 +28,14 @@ class timeStepper {
 
   int setMassMatrix(feMat* Mass);
 
-  int setDampingMatrix(feMat* Damping);
-
   int setStiffnessMatrix(feMat* Stiffness);
 
-  int setQtypeMatrix(feMat* Qtype);
+  int setTalyMatrix(feMat* mat);
 
   int setForceVector(feVec* Force);
 
-  int setReaction(feVec* Reaction);
+
   
-  /*
-  template <typename T>
-  int setVector(feVector* vec, vecType vt);
-  */
   int setAdjoint(bool flag);
 
   int setComputeEigenvaluesFlag(bool flag);
@@ -178,10 +172,6 @@ class timeStepper {
 		return m_Mass;
 	 }
 
-  feMat* getDamping()
-	 {
-		return m_Damping;
-	 }
   feMat* getStiffness()
 	 {
 		return m_Stiffness;
@@ -198,15 +188,11 @@ class timeStepper {
  protected:
   feMat* m_Mass;
 
-  feMat* m_Damping;
-
   feMat* m_Stiffness;
 
-  feMat* m_Qtype;
+  feMat* m_TalyMat;
 
   feVec* m_Force;
-
-  feVec* m_Reaction;
   
   // Time stepper parameters
   double			m_dTimeStep;

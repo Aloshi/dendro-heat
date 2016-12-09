@@ -28,6 +28,8 @@ class HTEquation : public TALYFEMLIB::CEquation<HTNodeData> {
 
   explicit HTEquation()
       : TALYFEMLIB::CEquation<HTNodeData>(false, TALYFEMLIB::kAssembleGaussPoints) {
+    K_ = 1.0;
+    dt_ = 0.001;  // TODO
   }
 
   virtual void Solve(double dt, double t) {}

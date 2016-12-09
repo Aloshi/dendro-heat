@@ -59,6 +59,7 @@ class feMat {
    *  function for matrix based methods.
    **/ 
   virtual bool MatVec(Vec _in, Vec _out, double scale=1.0) = 0;
+  virtual bool MatVec_new(Vec _in, Vec _out, double scale=1.0) = 0;
   virtual bool MatGetDiagonal(Vec _diag, double scale=1.0) = 0;
 
   virtual bool GetAssembledMatrix(Mat *J, MatType mtype) = 0;

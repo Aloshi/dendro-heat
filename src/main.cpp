@@ -106,7 +106,7 @@ int main(int argc, char **argv)
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  int Ns = 32;
+  int Ns = 12;
   unsigned int dof = 1;
 
   char problemName[PETSC_MAX_PATH_LEN];
@@ -116,7 +116,7 @@ int main(int argc, char **argv)
   double dt = 0.001;
   double t1 = 0.01;
 
-  //DM  da;         // Underlying scalar DA - for scalar properties
+  DM  da;         // Underlying scalar DA - for scalar properties
   Vec rho;        // density - elemental scalar
 
   // Initial conditions
@@ -153,34 +153,35 @@ int main(int argc, char **argv)
   
 
   // create DA
-  /*CHKERRQ ( DMDACreate3d ( PETSC_COMM_WORLD, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DMDA_STENCIL_BOX, 
+  CHKERRQ ( DMDACreate3d ( PETSC_COMM_WORLD, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DMDA_STENCIL_BOX, 
                     Ns+1, Ns+1, Ns+1, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE,
-                    1, 1, 0, 0, 0, &da) );*/
-  auto oct = buildOct();
-  auto octCopy = oct;
+                    1, 1, 0, 0, 0, &da) );
+  /*auto oct = buildOct();
   std::cout << "Created oct tree\n";
   std::cout << "oct.size(): " << oct.size() << "\n";
   ot::DA da (oct, PETSC_COMM_WORLD, PETSC_COMM_WORLD, 0.3);
-  std::cout << "Created DA\n";
+  std::cout << "Created DA\n";*/
 
   MPI_Barrier(PETSC_COMM_WORLD);
-  massMatrix* Mass = new massMatrix(feMat::OCT); // Mass Matrix
-  stiffnessMatrix* Stiffness = new stiffnessMatrix(feMat::OCT); // Stiffness matrix
-  forceVector* Force = new forceVector(feVec::OCT);  // force term
+  massMatrix* Mass = new massMatrix(feMat::PETSC); // Mass Matrix
+  stiffnessMatrix* Stiffness = new stiffnessMatrix(feMat::PETSC); // Stiffness matrix
+  forceVector* Force = new forceVector(feVec::PETSC);  // force term
+  auto talyMat = new TalyMatrix<HTEquation, HTNodeData>(feMat::PETSC);  // mass + stiffness matrix
 
   // create vectors 
-  da.createVector(rho, true, false, 1);  // args??
+  /*da.createVector(rho, true, false, 1);  // args??
   da.createVector(initialTemperature, false, true, 1);
-  da.createVector(elementalTemp, true, true, 1);
-  //CHKERRQ( DMCreateGlobalVector(da, &rho) );
-  //CHKERRQ( DMCreateGlobalVector(da, &initialTemperature) );
+  da.createVector(elementalTemp, true, true, 1);*/
+
+  CHKERRQ( DMCreateGlobalVector(da, &rho) );
+  CHKERRQ( DMCreateGlobalVector(da, &initialTemperature) );
 
   // Set initial conditions
   CHKERRQ( VecSet ( initialTemperature, 0.0) ); 
   CHKERRQ( VecSet ( rho, 1.0 ) );
-  CHKERRQ( VecZeroEntries(elementalTemp) );
+  //CHKERRQ( VecZeroEntries(elementalTemp) );
 
-  PetscScalar *elemInitTempArray;
+  /*PetscScalar *elemInitTempArray;
   da.vecGetBuffer(elementalTemp, elemInitTempArray, true, true, false, dof);
 
   int maxD = da.getMaxDepth();
@@ -209,9 +210,9 @@ int main(int argc, char **argv)
   //da.vecRestoreBuffer(initialTemperature, data, false, false, true, dof);
   da.vecRestoreBuffer(elementalTemp, data, true, false, true, dof);
 }
+*/
 
-
-  /*int x, y, z, m, n, p;
+  int x, y, z, m, n, p;
   int mx,my,mz, xne, yne, zne;
 
   CHKERRQ( DMDAGetCorners(da, &x, &y, &z, &m, &n, &p) ); 
@@ -270,9 +271,8 @@ int main(int argc, char **argv)
 
   CHKERRQ( DMDAVecRestoreArray ( da, initialTemperature, &initialTemperatureArray ) );
   CHKERRQ( DMDAVecRestoreArray ( da, rho, &rhoArray ) );
-  */
 
-  //write_vector("ic.plt", initialTemperature, da);
+  write_vector("ic.plt", initialTemperature, da);
  
   // DONE - SET MATERIAL PROPERTIES ...
 
@@ -281,29 +281,35 @@ int main(int argc, char **argv)
 
   // Setup Matrices and Force Vector ...
   Mass->setProblemDimensions(1.0, 1.0, 1.0);
-  Mass->setDA(&da);
+  Mass->setDA(da);
   Mass->setDof(dof);
 
   Stiffness->setProblemDimensions(1.0, 1.0, 1.0);
-  Stiffness->setDA(&da);
+  Stiffness->setDA(da);
   Stiffness->setDof(dof);
   Stiffness->setNuVec(rho);
 
+  talyMat->setProblemDimensions(1.0, 1.0, 1.0);
+  talyMat->setDA(da);
+  talyMat->setDof(dof);
+
   Force->setProblemDimensions(1.0, 1.0, 1.0);
-  Force->setDA(&da);
+  Force->setDA(da);
   Force->setDof(dof);
 
-  TalyMatrix<HTEquation, HTNodeData> test;
 
   // time stepper ...
   parabolic *ts = new parabolic; 
 
-  ts->setMassMatrix(Mass);
-  ts->setStiffnessMatrix(Stiffness);
+  //ts->setMassMatrix(Mass);
+  //ts->setStiffnessMatrix(Stiffness);
+  ts->setTalyMatrix(talyMat);
+
   ts->setForceVector(Force);
   ts->setTimeFrames(1);
 
   ts->setInitialTemperature(initialTemperature);
+  ts->setDAForMonitor(da);
 
   ts->setTimeInfo(&ti);
   ts->setAdjoint(false); // set if adjoint or forward

@@ -12,6 +12,9 @@ class Aligner : public feMatrix<Aligner> {
   public:
     inline bool ElementalMatVec(int i, int j, int k, PetscScalar ***in, PetscScalar ***out, double scale) { return true; }
     inline bool ElementalMatVec(unsigned int idx, PetscScalar *in, PetscScalar *out, double scale) { return true; }
+    inline bool ElementalMatVec(PetscScalar* in_local, PetscScalar* out_local, PetscScalar* coords, double scale) {
+      assert(false);
+    }
 
     inline bool GetElementalMatrix(int i, int j, int k, PetscScalar *mat) { return true; }
     inline bool GetElementalMatrix(unsigned int idx, std::vector<ot::MatRecord> &records) { return true; }

@@ -5,10 +5,10 @@
 
 timeStepper::timeStepper()
 {
-  // MASS, STIFFNESS, DAMPING
+  // MASS, STIFFNESS
   m_Mass = NULL;
-  m_Damping = NULL;
   m_Stiffness = NULL;
+  m_TalyMat = NULL;
 
   // Set initial displacement and velocity to null
   m_vecInitialSolution = NULL;
@@ -25,7 +25,6 @@ timeStepper::timeStepper()
 
   // Adjoint flag false
   m_bIsAdjoint = false;
-
 
 }
 timeStepper::~timeStepper()
@@ -64,17 +63,6 @@ int timeStepper::setMassMatrix(feMat* Mass)
 }
 
 /**
- *	@brief This function sets the Damping Matrix
- * @param Damping operator
- * @return bool true if successful, false otherwise
- **/
-int timeStepper::setDampingMatrix(feMat* Damping)
-{
-  m_Damping = Damping;
-  return(0);
-}
-
-/**
  *	@brief This function sets the Stiffness Matrix
  * @param Stiffness operator
  * @return bool true if successful, false otherwise
@@ -85,14 +73,9 @@ int timeStepper::setStiffnessMatrix(feMat* Stiffness)
   return(0);
 }
 
-/**
- *	@brief This function sets the Qtype Matrix
- * @param Qtype operator
- * @return bool true if successful, false otherwise
- **/
-int timeStepper::setQtypeMatrix(feMat* Qtype)
+int timeStepper::setTalyMatrix(feMat* taly)
 {
-  m_Qtype = Qtype;
+  m_TalyMat = taly;
   return(0);
 }
 
@@ -104,17 +87,6 @@ int timeStepper::setQtypeMatrix(feMat* Qtype)
 int timeStepper::setForceVector(feVec* Force)
 {
   m_Force = Force;
-  return(0);
-}
-
-/**
- *	@brief This function sets the Reaction term
- * @param Reaction vector
- * @return bool true if successful, false otherwise
- **/
-int timeStepper::setReaction(feVec* Reaction)
-{
-  m_Reaction = Reaction;
   return(0);
 }
 

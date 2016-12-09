@@ -70,10 +70,15 @@ class parabolic : public timeStepper //<parabolic>
 		return m_solVector;
 	 }
 
+  inline void setDAForMonitor(DM da) {
+    m_da = da;
+  }
+
  private:
   int m_inlevels;
   int m_iMon;
   std::vector<Vec> m_solVector;
+  DM m_da;
 };
 
 
@@ -191,10 +196,13 @@ int parabolic::solve()
 void parabolic::jacobianMatMult(Vec In, Vec Out)
 {
   VecZeroEntries(Out); /* Clear to zeros*/
-  //m_Damping->MatVec(In, Out); /* Matvec */
-  m_Mass->MatVec(In, Out);
-  m_Stiffness->MatVec(In, Out, -m_ti->step); /* -dt factor for stiffness*/
-  //m_Qtype->MatVec(In,Out,m_ti->step); /* dt factor for qtype matrix*/
+
+  if (m_TalyMat) {
+    m_TalyMat->MatVec_new(In, Out);
+  } else {
+    m_Mass->MatVec(In, Out);
+    m_Stiffness->MatVec(In, Out, -m_ti->step); /* -dt factor for stiffness*/
+  }
 }
 
 void parabolic::mgjacobianMatMult(DM da, Vec In, Vec Out){
@@ -210,9 +218,7 @@ bool parabolic::setRHS()
   VecZeroEntries(m_vecRHS);
 
   ((forceVector*)m_Force)->setPrevTS(m_vecSolution);
-  m_Force->addVec(m_vecRHS);
-  //m_Damping->MatVec(m_vecSolution,m_vecRHS); /* Set right hand side*/
-  //m_Force->addVec(m_vecRHS,m_ti->step);  /* set Force term*/
+  m_Force->addVec(m_vecRHS, 1.0 / m_ti->step);
   return true;
 }
 
@@ -237,10 +243,10 @@ int parabolic::monitor()
 		ierr = VecCopy(m_vecSolution,tempSol); CHKERRQ(ierr);
 		m_solVector.push_back(tempSol);
 
-/*    std::stringstream ss;
+    std::stringstream ss;
     ss << "timestep_" << m_ti->currentstep << ".plt";
     write_vector(ss.str().c_str(), m_vecSolution, m_da);
-*/
+
 
     /*PetscViewer view;
     PetscViewerCreate(PETSC_COMM_WORLD, &view);

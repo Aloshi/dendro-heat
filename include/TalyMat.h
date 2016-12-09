@@ -6,6 +6,7 @@
 #include <Grid/grid_types/grid.h>
 #include <Grid/gridfield.h>
 #include <Grid/elem.h>
+#include <Grid/elem_types/elem3dhexahedral.h>
 #include <Grid/femelm.h>
 #include <DataStructure/zeroarray.h>
 #include <DataStructure/zeromatrix.h>
@@ -13,13 +14,20 @@
 template <typename Equation, typename NodeData>
 class TalyMatrix : public feMatrix< TalyMatrix<Equation, NodeData> >
 {
+  typedef feMatrix< TalyMatrix<Equation, NodeData> > Parent;
+
  public:
-  TalyMatrix()
-    : taly_grid_(), taly_elem_(NULL), taly_fe_(&taly_grid_, TALYFEMLIB::BASIS_ALL)
+  TalyMatrix(feMat::daType da)
+    : Parent(da), taly_grid_(), taly_elem_(NULL), taly_fe_(&taly_grid_, TALYFEMLIB::BASIS_ALL)
   {
     // 8 nodes, 1 element
     taly_grid_.redimArrays(8, 1);
-    taly_elem_ = taly_grid_.elm_array_[0];
+    for (int i = 0; i < 8; i++) {
+      taly_grid_.node_array_[i] = new TALYFEMLIB::NODE();
+    }
+
+    taly_elem_ = new TALYFEMLIB::ELEM3dHexahedral();
+    taly_grid_.elm_array_[0] = taly_elem_;
 
     int node_id_array[8] = {
       0, 1, 2, 3, 4, 5, 6, 7
@@ -36,6 +44,8 @@ class TalyMatrix : public feMatrix< TalyMatrix<Equation, NodeData> >
     be_.redim(8);
   }
 
+  inline bool initStencils() {}
+
   inline bool ElementalMatVec(int i, int j, int k, PetscScalar ***in, PetscScalar ***out, double scale) {
     assert(false);
   }
@@ -46,11 +56,12 @@ class TalyMatrix : public feMatrix< TalyMatrix<Equation, NodeData> >
 
   inline bool ElementalMatVec(PetscScalar* in_local, PetscScalar* out_local, PetscScalar* coords, double scale)
   {
+    const int ndof = 1;  // TODO
+
     // update node coordinates and values
     for (unsigned int i = 0; i < 8; i++) {
       taly_grid_.node_array_[i]->setCoor(coords[i*3], coords[i*3+1], coords[i*3+2]);
 
-      const int ndof = 1;
       for (unsigned int dof = 0; dof < ndof; dof++) {
         taly_gf_.GetNodeData(i).value(dof) = in_local[i*ndof+dof];
       }
@@ -65,15 +76,30 @@ class TalyMatrix : public feMatrix< TalyMatrix<Equation, NodeData> >
       taly_eq_.Integrands(taly_fe_, Ae_, be_);
     }
 
+    /*for (unsigned int y = 0; y < 8; y++) {
+      for (unsigned int x = 0; x < 8; x++) {
+        std::cout << "Ae(" << x << ", " << y << ") = " << Ae_(x, y) << "  ";
+      }
+      std::cout << "\n";
+    }*/
+
     // copy Ae/be to dendro structures
-    for (unsigned int i = 0; i < 8; i++) {
-      for (unsigned int j = 0; j < 8; j++) {
-        out_local[i*8 + j] += Ae_(i, j);  // * scale
+    for (int k = 0; k < 8; k++) {
+      for (int j=0; j<8; j++) {
+        out_local[ndof * k] += Ae_(k, j) * in_local[ndof * j];  // TODO * scale?
       }
     }
+    /*for (int i = 0; i < 8; i++) {
+      std::cout << "in_local[" << i << "] = " << in_local[i] << "   (coords: " << coords[i*3] << ", " << coords[i*3+1] << ", " << coords[i*3+2] << ")\n";
+    }
+    std::cout << "\n";*/
 
     // TODO be is ignored
+    return true;
   }
+
+  bool preMatVec() {}
+  bool postMatVec() {}
 
   // void Integrands(const FEMElm& fe, ZEROMATRIX<double>& Ae, ZEROMATRIX<double>& be);
 

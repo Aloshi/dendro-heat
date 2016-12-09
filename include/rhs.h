@@ -269,9 +269,6 @@ bool forceVector::ElementalAddVec(int i, int j, int k, PetscScalar ***out, doubl
   double stencilScale =  m_dHx*scale;
   int **Ajk = (int **)m_stencil;
   PetscScalar*** in = (PetscScalar***) m_prevTSArray;
-  /*for (int r = 0; r < 8; r++) {
-    std::cout << "Element " << i << ", " << j << ", " << k << " in[" << r << "] = " << in[idx[r][0]][idx[r][1]][idx[r][2]] << "\n";
-  }*/
   
   for (int q = 0; q < 8; q++) {
     for (int r = 0; r < 8; r++) {
@@ -279,6 +276,7 @@ bool forceVector::ElementalAddVec(int i, int j, int k, PetscScalar ***out, doubl
       out[idx[q][0]][idx[q][1]][idx[q][2]] += contrib;
     }
   }
+
   return true;
   // std::cout << "Stencil scale is " << stencilScale << std::endl;
 }
