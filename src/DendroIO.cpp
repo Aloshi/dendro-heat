@@ -8,6 +8,10 @@
 
 #define VTK_HEXAHEDRON 12
 
+void octree2VTK(ot::DA& da, unsigned int rank, const double* u, std::string file_name) {
+  assert(false);
+}
+
 class Aligner : public feMatrix<Aligner> {
   public:
     inline bool ElementalMatVec(int i, int j, int k, PetscScalar ***in, PetscScalar ***out, double scale) { return true; }
@@ -25,7 +29,7 @@ class Aligner : public feMatrix<Aligner> {
     inline bool initStencils() { initOctLut(); return true; }
 };
 
-void octree2VTK(ot::DA& da, unsigned int rank, const double* u, std::string file_name)
+void octree2tec(ot::DA& da, unsigned int rank, const double* u, std::string file_name)
 {
   unsigned int nsd = 3;
   unsigned int ndof = 1;
@@ -55,11 +59,14 @@ void octree2VTK(ot::DA& da, unsigned int rank, const double* u, std::string file
   zone.elem_type = elem_type;
   w.write_zone(zone);
 
+  double* node_data_loc = new double[8*ndof];
+  double* node_data_glob = new double[8*ndof];
+
   int maxD = da.getMaxDepth();
-  double hx = 1.0 / ((double)(1 << (maxD-1)));
+  double hx = 1.0 / ((double)(1 << (maxD-1)));  // TODO do hy/hz to support varied problem sizes
   for ( da.init<ot::DA_FLAGS::ALL>(), da.init<ot::DA_FLAGS::WRITABLE>(); da.curr() < da.end<ot::DA_FLAGS::ALL>(); da.next<ot::DA_FLAGS::ALL>()) {
     unsigned int i = da.curr();
-    Point pt = da.getCurrentOffset();
+    Point pt = da.getCurrentOffset();  // TODO this is wrong, need to multiply by xFac
 
     unsigned int lev = da.getLevel(i);
     unsigned int width = ((1 << (maxD - lev)));
@@ -81,16 +88,31 @@ void octree2VTK(ot::DA& da, unsigned int rank, const double* u, std::string file
     Aligner hack;
     Aligner::stdElemType elemType;
     hack.alignElementAndVertices(&da, elemType, node_idx);
+    //da.getNodeIndices(node_idx); 
+
+    for (int j = 0; j < 8; j++) {
+      node_data_loc[j] = u[node_idx[j]*ndof];
+    }
+    //hack.interp_global_to_local(node_data_glob, node_data_loc, &da);
 }
+
+    unsigned char hn = da.getHangingNodeIndex(da.curr());
 
     for (int j = 0; j < 8; j++) {
       double p[3] = { coords[j][0] * hx, coords[j][1] * hx, coords[j][2] * hx };
-      double val = u[node_idx[j]];
-      //double val = u[i];
+      double val = u[node_idx[j]*ndof];  // for nodal
+      //double val = u[i];  // for elemental
+      //double val = node_data_glob[j*ndof];
+      if ((hn & (1 << j))) {
+        val = 1.0;
+      }
       double data[4] = { p[0], p[1], p[2], val };
       w.write_node(data);
     }
   }
+
+  delete[] node_data_loc;
+  delete[] node_data_glob;
 
   for (unsigned int i = 0; i < n_elements; i++) {
     PhysicalNodeID conn[8];

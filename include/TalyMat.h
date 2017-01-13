@@ -61,11 +61,13 @@ class TalyMatrix : public feMatrix< TalyMatrix<Equation, NodeData> >
     // update node coordinates and values
     for (unsigned int i = 0; i < 8; i++) {
       taly_grid_.node_array_[i]->setCoor(coords[i*3], coords[i*3+1], coords[i*3+2]);
+      //std::cout << "Node [" << i << "] coords: " << coords[i*3] << ", " << coords[i*3+1] << ", " << coords[i*3+2] << "\n";
 
       for (unsigned int dof = 0; dof < ndof; dof++) {
         taly_gf_.GetNodeData(i).value(dof) = in_local[i*ndof+dof];
       }
     }
+    //std::cout << "\n";
 
     Ae_.fill(0.0);
     be_.fill(0.0);

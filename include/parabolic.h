@@ -18,6 +18,8 @@
 #include <sstream>
 #include "VecIO.h"
 #include "rhs.h"
+#include "DendroIO.h"
+#include "OctVTK.h"
 
 /**
  *	@brief Main class for a linear parabolic problem
@@ -25,10 +27,10 @@
  * @date 5/7/07
  **/
 
-
 class parabolic : public timeStepper //<parabolic>
 {
  public:
+  parabolic() : m_da(NULL), m_octDA(NULL) {}
 
   virtual int init();
 
@@ -74,11 +76,16 @@ class parabolic : public timeStepper //<parabolic>
     m_da = da;
   }
 
+  inline void setDAForMonitor(ot::DA& da) {
+    m_octDA = &da;
+  }
+
  private:
   int m_inlevels;
   int m_iMon;
   std::vector<Vec> m_solVector;
   DM m_da;
+  ot::DA* m_octDA;
 };
 
 
@@ -202,6 +209,7 @@ void parabolic::jacobianMatMult(Vec In, Vec Out)
   } else {
     m_Mass->MatVec(In, Out);
     m_Stiffness->MatVec(In, Out, -m_ti->step); /* -dt factor for stiffness*/
+    assert(false);
   }
 }
 
@@ -218,7 +226,11 @@ bool parabolic::setRHS()
   VecZeroEntries(m_vecRHS);
 
   ((forceVector*)m_Force)->setPrevTS(m_vecSolution);
-  m_Force->addVec(m_vecRHS, 1.0 / m_ti->step);
+  if (m_TalyMat) {
+    m_Force->addVec(m_vecRHS, 1.0 / m_ti->step);
+  } else {
+    m_Force->addVec(m_vecRHS, 1.0/*1.0 / m_ti->step*/);
+  }
   return true;
 }
 
@@ -244,9 +256,22 @@ int parabolic::monitor()
 		m_solVector.push_back(tempSol);
 
     std::stringstream ss;
-    ss << "timestep_" << m_ti->currentstep << ".plt";
-    write_vector(ss.str().c_str(), m_vecSolution, m_da);
+    ss << "timestep_" << m_ti->currentstep;
 
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    if (m_da) {
+      write_vector(ss.str().c_str(), m_vecSolution, m_da);
+    } else {
+      /*PetscScalar* data;
+      const int dof = 1;
+      m_octDA->vecGetBuffer(m_vecSolution, data, false, false, true, dof);
+      octree2VTK(*m_octDA, rank, data, ss.str().c_str());
+      m_octDA->vecRestoreBuffer(m_vecSolution, data, false, false, true, dof);*/
+      std::string asdf = ss.str();
+      saveNodalVecAsVTK(m_octDA, m_vecSolution, (char*) asdf.data());
+    }
 
     /*PetscViewer view;
     PetscViewerCreate(PETSC_COMM_WORLD, &view);

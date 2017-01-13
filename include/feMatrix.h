@@ -5,6 +5,7 @@
 #include "odaUtils.h"
 #include "feMat.h"
 #include "timeInfo.h"
+#include "interp.h"
 
 template <typename T>
 class feMatrix : public feMat {
@@ -510,6 +511,57 @@ bool feMatrix<T>::MatVec(Vec _in, Vec _out, double scale){
 }
 
 
+// builds directly as TalyFEM coordinates
+// pt - "bottom left" of element (already corrected w/ xFac/yFac/zFac)
+// h - width in each dimension (already corrected w/ xFac/yFac/zFac)
+inline void build_taly_coordinates(double* coords /*out*/, const Point& pt, const Point& h)
+{
+  const double& hx = h.x();
+  const double& hy = h.y();
+  const double& hz = h.z();
+
+  coords[0] = pt.x(); coords[1] = pt.y(); coords[2] = pt.z();
+  coords[3] = coords[0] + hx; coords[4] = coords[1]; coords[5] = coords[2];
+  coords[6] = coords[0] + hx; coords[7] = coords[1]+hy; coords[8] = coords[2];
+  coords[9] = coords[0] ; coords[10] = coords[1]+hy; coords[11] = coords[2];
+  coords[12] = coords[0] ; coords[13] = coords[1]; coords[14] = coords[2]+hz;
+  coords[15] = coords[0] + hx; coords[16] = coords[1]; coords[17] = coords[2]+hz;
+  coords[18] = coords[0] + hx ; coords[19] = coords[1]+hy; coords[20] = coords[2]+hz;
+  coords[21] = coords[0] ; coords[22] = coords[1]+hy; coords[23] = coords[2]+hz;
+}
+
+// morton -> taly ordering
+inline void dendro_to_taly(void* dest, void* src, size_t bytes)
+{
+  // maps morton (Dendro) indices to TalyFEM order
+  // 2----3        3----2
+  // |    |   ->   |    |
+  // 0----1        0----1
+  static const int morton_to_taly_map[8] = {
+    0, 1, 3, 2, 4, 5, 7, 6
+  };
+
+  for (int i = 0; i < 8; i++) {
+    memcpy(static_cast<char*>(dest) + bytes*morton_to_taly_map[i],
+           static_cast<char*>(src)  + bytes*i,
+           bytes);
+  }
+}
+
+// taly -> morton ordering
+inline void taly_to_dendro(void* dest, void* src, size_t bytes)
+{
+  static const int morton_to_taly_map[8] = {
+    0, 1, 3, 2, 4, 5, 7, 6
+  };
+
+  for (int i = 0; i < 8; i++) {
+    memcpy(static_cast<char*>(dest) + bytes*i,
+           static_cast<char*>(src)  + bytes*morton_to_taly_map[i],
+           bytes);
+  }
+}
+
 template <typename T>
 bool feMatrix<T>::MatVec_new(Vec _in, Vec _out, double scale){
 	PetscFunctionBegin;
@@ -679,9 +731,65 @@ bool feMatrix<T>::MatVec_new(Vec _in, Vec _out, double scale){
 		m_octDA->ReadFromGhostsBegin<PetscScalar>(in, m_uiDof);
 		preMatVec();
 
+		const unsigned int maxD = m_octDA->getMaxDepth();
+		const double xFac = m_dLx/((double)(1<<(maxD-1)));
+		const double yFac = m_dLy/((double)(1<<(maxD-1)));
+		const double zFac = m_dLz/((double)(1<<(maxD-1)));
+
+    PetscScalar* local_in = new PetscScalar[m_uiDof*8];
+    PetscScalar* local_out = new PetscScalar[m_uiDof*8];
+    PetscScalar* node_data_temp = new PetscScalar[m_uiDof*8];  // scratch
+    double coords[8*3];
+
 		// Independent loop, loop through the nodes this processor owns..
 		for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
-			ElementalMatVec( m_octDA->curr(), in, out, scale); 
+
+			int lev = m_octDA->getLevel(m_octDA->curr());
+      Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
+      Point pt = m_octDA->getCurrentOffset();
+      pt.x() *= xFac;
+      pt.y() *= yFac;
+      pt.z() *= zFac;
+
+      unsigned int node_idxes[8];  // holds node IDs; in[m_uiDof*idx[i]] for data
+
+      //stdElemType elemType;
+      //alignElementAndVertices(m_octDA, elemType, node_idxes);       
+
+      m_octDA->getNodeIndices(node_idxes);
+
+      // build node coordinates (fill coords)
+      build_taly_coordinates(coords, pt, h);
+
+      // interpolate (local_in -> node_data_temp) TODO check order of arguments
+      interp_global_to_local(in, node_data_temp, m_octDA);  // TODO doesn't take into account ndof
+
+      // map from dendro order to taly order (node_data_temp -> local_in);
+      // TODO move to TalyMatrix
+      dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
+
+      // initialize local_out?
+      for (int i = 0; i < 8; i++) {
+        // TODO m_uiDof
+        local_out[i] = 0.0;
+      }
+
+      // calculate values (fill local_out)
+      ElementalMatVec(local_in, local_out, coords, scale);
+
+      // remap back to Dendro format (local_out -> node_data_temp)
+      // TODO move to TalyMatrix
+      taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
+
+      // interpolate hanging nodes (node_data_temp -> local_out)
+      // need to zero out local_out first, interp is additive
+      // for some reason
+      /*for (int i = 0; i < 8; i++) {
+        for (int dof = 0; dof < m_uiDof; dof++) {
+          local_out[i*m_uiDof + dof] = 0.0;
+        }
+      }*/
+      interp_local_to_global(node_data_temp, out, m_octDA);  // TODO doesn't take into account ndof
 		}//end INDEPENDENT
 
 		// Wait for communication to end.
@@ -690,8 +798,47 @@ bool feMatrix<T>::MatVec_new(Vec _in, Vec _out, double scale){
 
 		// Dependent loop ...
 		for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
-			ElementalMatVec( m_octDA->curr(), in, out, scale); 
+
+			int lev = m_octDA->getLevel(m_octDA->curr());
+      Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
+      Point pt = m_octDA->getCurrentOffset();
+      pt.x() *= xFac;
+      pt.y() *= yFac;
+      pt.z() *= zFac;
+
+      unsigned int node_idxes[8];  // holds node IDs; in[m_uiDof*idx[i]] for data
+      m_octDA->getNodeIndices(node_idxes);
+
+      // build node coordinates (fill coords)
+      build_taly_coordinates(coords, pt, h);
+
+      // interpolate (local_in -> node_data_temp) TODO check order of arguments
+      interp_global_to_local(in, node_data_temp, m_octDA);  // TODO doesn't take into account ndof
+
+      // map from dendro order to taly order (node_data_temp -> local_in);
+      // TODO move to TalyMatrix
+      dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
+
+      // initialize local_out?
+      for (int i = 0; i < 8; i++) {
+        // TODO m_uiDof
+        local_out[i] = 0.0;
+      }
+
+      // calculate values (fill local_out)
+      ElementalMatVec(local_in, local_out, coords, scale);
+
+      // remap back to Dendro format (local_out -> node_data_temp)
+      // TODO move to TalyMatrix
+      taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
+
+      // interpolate hanging nodes (node_data_temp -> local_out)
+      interp_local_to_global(node_data_temp, out, m_octDA);  // TODO doesn't take into account ndof
 		}//end DEPENDENT
+
+    delete[] local_in;
+    delete[] local_out;
+    delete[] node_data_temp;
 
 		postMatVec();
 
@@ -1009,7 +1156,6 @@ PetscErrorCode feMatrix<T>::reOrderIndices(unsigned char eType, unsigned int* in
 #endif
 	PetscFunctionReturn(0);
 }
-
 
 
 #endif
