@@ -10,22 +10,8 @@ static char help[] = "Driver for heat";
 
 #include "petscksp.h"
 
-//#include "oda.h"
-//#include "TreeNode.h"
-//#include "parUtils.h"
-//#include "omg.h"
-
 #include "timeInfo.h"
 #include "hcurvedata.h"
-//#include "feMatrix.h"
-//#include "feVector.h"
-//#include "femUtils.h"
-//#include "timeStepper.h"
-//#include "newmark.h"
-//#include "elasStiffness.h"
-//#include "elasMass.h"
-//#include "raleighDamping.h"
-//#include "cardiacDynamic.h"
 
 #include "massMatrix.h"
 #include "parabolic.h"
@@ -40,6 +26,7 @@ static char help[] = "Driver for heat";
 
 // defined below
 void setScalarByFunction(ot::DA* da, Vec vec, std::function<double(double,double,double)> f);
+int setScalarByFunction(DM da, Vec vec, std::function<double(double,double,double)> f);
 
 static double gSize[3] = {1, 1, 1};
 
@@ -166,18 +153,12 @@ int main(int argc, char **argv)
 
   // Initial conditions
   Vec initialTemperature; 
-  Vec elementalTemp;  // hack since we can't loop over nodes, gets interpolated onto nodes later
 
   timeInfo ti;
 
   PetscBool mf = PETSC_FALSE;
-  bool mfree = false;
   PetscOptionsGetBool(0, "-mfree", &mf, 0);
-  
-  if (mf == PETSC_TRUE) {
-    mfree = true;
-  } else 
-    mfree = false;
+  bool mfree = (mf == PETSC_TRUE);
 
   // get Ns
   CHKERRQ ( PetscOptionsGetInt(0,"-Ns",&Ns,0) );
@@ -191,11 +172,6 @@ int main(int argc, char **argv)
   ti.stop  = t1;
   ti.step  = dt;
 
-  /*if (!rank) {
-    std::cout << "Grid size is " << Ns+1 << " and NT is " << (int)ceil(1.0/dt) << std::endl;
-  }*/
-
-  
 
   // create DA
   /*CHKERRQ ( DMDACreate3d ( PETSC_COMM_WORLD, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DMDA_STENCIL_BOX, 
@@ -216,7 +192,6 @@ int main(int argc, char **argv)
   // create vectors 
   da.createVector(rho, true, false, 1);  // args??
   da.createVector(initialTemperature, false, true, 1);
-  da.createVector(elementalTemp, true, true, 1);
 
   /*CHKERRQ( DMCreateGlobalVector(da, &rho) );
   CHKERRQ( DMCreateGlobalVector(da, &initialTemperature) );*/
@@ -225,147 +200,17 @@ int main(int argc, char **argv)
   CHKERRQ( VecSet ( initialTemperature, 0.0) ); 
   CHKERRQ( VecSet ( rho, 1.0 ) );
 
-// set IC based on elemental value
-/*  CHKERRQ( VecZeroEntries(elementalTemp) );
+  /*setScalarByFunction(da, Ns, initialTemperature, [](double x, double y, double z) {
+    return sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
+  });*/
 
-  PetscScalar *elemInitTempArray;
-  da.vecGetBuffer(elementalTemp, elemInitTempArray, true, true, false, dof);
-
-  int maxD = da.getMaxDepth();
-  double hx = 1.0 / ((double)(1 << (maxD-1)));
-  for ( da.init<ot::DA_FLAGS::ALL>(), da.init<ot::DA_FLAGS::WRITABLE>(); da.curr() < da.end<ot::DA_FLAGS::ALL>(); da.next<ot::DA_FLAGS::ALL>()) {
-    unsigned int i = da.curr();
-    unsigned int lev = da.getLevel(i);
-    unsigned int half = ((1 << (maxD - lev))) / 2;
-
-    Point pt = da.getCurrentOffset();
-    double coords[3] = { (pt.x() + half) * hx, (pt.y() + half) * hx, (pt.z() + half) * hx };
-    //std::cout << "elem " << i << ": " << coords[0] << ", " << coords[1] << ", " << coords[2] << "\n";
-    elemInitTempArray[i] = sin(M_PI * coords[0]) * sin(M_PI * coords[1]) * sin(M_PI * coords[2]);
-  }
-
-  da.vecRestoreBuffer(elementalTemp, elemInitTempArray, true, true, false, dof);
-
-  elementToNode(da, elementalTemp, initialTemperature, dof);
-*/
-
-  PetscScalar* initialTempArray;
-  /*da.vecGetBuffer(initialTemperature, initialTempArray, false, false, false, dof);
-
-  const unsigned int maxD = da.getMaxDepth();
-  const double xFac = 1.0/((double)(1<<(maxD-1)));
-  const double yFac = xFac, zFac = xFac;
-
-  for ( da.init<ot::DA_FLAGS::ALL>(), da.init<ot::DA_FLAGS::WRITABLE>(); da.curr() < da.end<ot::DA_FLAGS::ALL>(); da.next<ot::DA_FLAGS::ALL>()) {
-    unsigned int i = da.curr();
-    unsigned int lev = da.getLevel(i);
-    unsigned int hx = ((1 << (maxD - lev))) * xFac;
-    unsigned int hy = hx, hz = hx;
-    Point pt = da.getCurrentOffset();
-
-    double coords[8*3];
-    coords[0] = pt.x() * xFac; coords[1] = pt.y() * yFac; coords[2] = pt.z() * zFac;
-    coords[3] = coords[0] + hx; coords[4] = coords[1]; coords[5] = coords[2];
-    coords[6] = coords[0] + hx; coords[7] = coords[1]+hy; coords[8] = coords[2];
-    coords[9] = coords[0] ; coords[10] = coords[1]+hy; coords[11] = coords[2];
-
-    coords[12] = coords[0] ; coords[13] = coords[1]; coords[14] = coords[2]+hz;
-    coords[15] = coords[0] + hx; coords[16] = coords[1]; coords[17] = coords[2]+hz;
-    coords[18] = coords[0] + hx; coords[19] = coords[1]+hy; coords[20] = coords[2]+hz;
-    coords[21] = coords[0] ; coords[22] = coords[1]+hy; coords[23] = coords[2]+hz;
-
-    unsigned int idx[8];
-    da.getNodeIndices(idx);
-
-    unsigned char hn = da.getHangingNodeIndex(da.curr());
-    for (int j = 0; j < 8; j++) {
-      if (!(hn & (1 << j))) {
-        // set value at node_idx[j] based on coords[j*3]
-        double val = sin(M_PI * coords[j*3+0]) * sin(M_PI * coords[j*3+1]) * sin(M_PI * coords[j*3+2]);
-        //std::cout << "val at " << idx[j] << " (" << coords[j*3] << ", " << coords[j*3+1] << ", " << coords[j*3+2] << "): " << val << "\n";
-        initialTempArray[idx[j]] = val;
-      }
-    }
-  }
-  da.vecRestoreBuffer(initialTemperature, initialTempArray, false, false, false, dof);*/
   setScalarByFunction(&da, initialTemperature, [](double x, double y, double z) {
     return sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
   });
 
   // print IC
-{
-  //PetscScalar* data;
-  //da.vecGetBuffer(initialTemperature, data, false, false, true, dof);
-  //da.vecGetBuffer(elementalTemp, data, true, false, true, dof);
-  //octree2VTK(da, rank, data, "ic.plt");
   octree2VTK(&da, initialTemperature, "ic");
-  //da.vecRestoreBuffer(initialTemperature, data, false, false, true, dof);
-  //da.vecRestoreBuffer(elementalTemp, data, true, false, true, dof);
-}
 
-
-  /*int x, y, z, m, n, p;
-  int mx,my,mz, xne, yne, zne;
-
-  CHKERRQ( DMDAGetCorners(da, &x, &y, &z, &m, &n, &p) ); 
-  CHKERRQ( DMDAGetInfo(da,0, &mx, &my, &mz, 0,0,0,0,0,0,0,0,0) ); 
-
-  if (x+m == mx) {
-    xne=m-1;
-  } else {
-    xne=m;
-  }
-  if (y+n == my) {
-    yne=n-1;
-  } else {
-    yne=n;
-  }
-  if (z+p == mz) {
-    zne=p-1;
-  } else {
-    zne=p;
-  }
-
-  double acx,acy,acz;
-  double hx = 1.0/((double)Ns);
-
-  // SET MATERIAL PROPERTIES ...
-
-  // @todo - Write routines to read/write in Parallel
-  // allocate for temporary buffers ...
-  unsigned int elemSize = Ns*Ns*Ns;  // number of elements
-  std::cout << "Elem size is " << elemSize << std::endl;
-  unsigned int nodeSize = (Ns+1)*(Ns+1)*(Ns+1);  // number of nodes
-
-  // Set Elemental material properties
-  PetscScalar ***initialTemperatureArray, ***rhoArray;
-
-  CHKERRQ(DMDAVecGetArray(da, initialTemperature, &initialTemperatureArray));
-  CHKERRQ(DMDAVecGetArray(da, rho, &rhoArray));
-
-  std::cout << "Setting initial guess." << std::endl;
-
-  // loop through all nodes ...
-  for (int k=z; k < z+p; k++) {
-    for (int j=y; j < y+n; j++) {
-      for (int i=x; i < x+m; i++) {
-        double coords[3] = { hx*i, hx*j, hx*k };
-        double ic = sin(M_PI * coords[0]) * sin(M_PI * coords[1]) * sin(M_PI * coords[2]);
-        //std::cout << "ic at " << coords[0] << ", " << coords[1] << ", " << coords[2] << ": " << ic << "\n";
-
-        initialTemperatureArray[k][j][i] = ic;
-        rhoArray[k][j][i] = 1.0;
-      } // end i
-    } // end j
-  } // end k
-
-  std::cout << "Finished initial conditions loop." << std::endl;
-
-  CHKERRQ( DMDAVecRestoreArray ( da, initialTemperature, &initialTemperatureArray ) );
-  CHKERRQ( DMDAVecRestoreArray ( da, rho, &rhoArray ) );
-
-  write_vector("ic.plt", initialTemperature, da);
- */
   // DONE - SET MATERIAL PROPERTIES ...
 
   unsigned int numSteps = (unsigned int)(ceil(( ti.stop - ti.start)/ti.step));
@@ -425,6 +270,54 @@ int main(int argc, char **argv)
   }
 
   PetscFinalize();
+}
+
+// set IC for PETSc DA
+int setScalarByFunction(DM da, int Ns, Vec vec, std::function<double(double,double,double)> f) {
+  int x, y, z, m, n, p;
+  int mx,my,mz, xne, yne, zne;
+
+  CHKERRQ( DMDAGetCorners(da, &x, &y, &z, &m, &n, &p) ); 
+  CHKERRQ( DMDAGetInfo(da,0, &mx, &my, &mz, 0,0,0,0,0,0,0,0,0) ); 
+
+  if (x+m == mx) {
+    xne=m-1;
+  } else {
+    xne=m;
+  }
+  if (y+n == my) {
+    yne=n-1;
+  } else {
+    yne=n;
+  }
+  if (z+p == mz) {
+    zne=p-1;
+  } else {
+    zne=p;
+  }
+
+  double hx = 1.0/((double)Ns);
+
+  // allocate for temporary buffers ...
+  unsigned int elemSize = Ns*Ns*Ns;  // number of elements
+  unsigned int nodeSize = (Ns+1)*(Ns+1)*(Ns+1);  // number of nodes
+
+  // Set Elemental material properties
+  PetscScalar ***vec_data = NULL;
+  CHKERRQ(DMDAVecGetArray(da, vec, &vec_data));
+
+  // loop through all nodes ...
+  for (int k=z; k < z+p; k++) {
+    for (int j=y; j < y+n; j++) {
+      for (int i=x; i < x+m; i++) {
+        double coords[3] = { hx*i, hx*j, hx*k };
+        double val = f(coords[0], coords[1], coords[2]);
+        vec_data[k][j][i] = val;
+      } // end i
+    } // end j
+  } // end k
+
+  CHKERRQ( DMDAVecRestoreArray ( da, vec, &vec_data ) );
 }
 
 void setScalarByFunction(ot::DA* da, Vec vec, std::function<double(double,double,double)> f) {
