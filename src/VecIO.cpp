@@ -22,7 +22,7 @@ int get_node_id(int i, int j, int k, int nx, int ny, int nz, int node_idx) {
 }
 
 // 3D only
-int write_vector(const char* fileName, Vec vec, DM da)
+int write_vector(const char* file_prefix, Vec vec, DM da)
 {
   
   int x, y, z, m, n, p;
@@ -72,10 +72,11 @@ int write_vector(const char* fileName, Vec vec, DM da)
   assert(size == 1);
 
   TecplotWriterASCII w;
-  w.open(fileName, false);
+  std::string path = std::string(file_prefix) + ".plt";
+  w.open(path.c_str(), false);
 
   TecplotHeader header;
-  header.title = fileName;
+  header.title = file_prefix;
   header.variables = { "x", "y", "z", "u" };
   w.write_header(header);
 

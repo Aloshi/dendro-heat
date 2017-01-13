@@ -26,7 +26,7 @@ static char help[] = "Driver for heat";
 
 // defined below
 void setScalarByFunction(ot::DA* da, Vec vec, std::function<double(double,double,double)> f);
-int setScalarByFunction(DM da, Vec vec, std::function<double(double,double,double)> f);
+int setScalarByFunction(DM da, int Ns, Vec vec, std::function<double(double,double,double)> f);
 
 static double gSize[3] = {1, 1, 1};
 
@@ -148,17 +148,22 @@ int main(int argc, char **argv)
   double dt = 0.001;
   double t1 = 0.01;
 
-  //DM  da;         // Underlying scalar DA - for scalar properties
-  Vec rho;        // density - elemental scalar
-
   // Initial conditions
   Vec initialTemperature; 
+  Vec rho;        // density - elemental scalar
 
   timeInfo ti;
 
   PetscBool mf = PETSC_FALSE;
   PetscOptionsGetBool(0, "-mfree", &mf, 0);
   bool mfree = (mf == PETSC_TRUE);
+
+  bool useOctree = true;
+  {
+    PetscBool temp = PETSC_TRUE;
+    PetscOptionsGetBool(NULL, "-use_octree", &temp, NULL);
+    useOctree = (temp == PETSC_TRUE);
+  }
 
   // get Ns
   CHKERRQ ( PetscOptionsGetInt(0,"-Ns",&Ns,0) );
@@ -172,68 +177,92 @@ int main(int argc, char **argv)
   ti.stop  = t1;
   ti.step  = dt;
 
+  ot::DA* octDA = NULL;
+  DM petscDA = NULL;
 
-  // create DA
-  /*CHKERRQ ( DMDACreate3d ( PETSC_COMM_WORLD, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DMDA_STENCIL_BOX, 
-                    Ns+1, Ns+1, Ns+1, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE,
-                    1, 1, 0, 0, 0, &da) );*/
-  auto oct = buildOct();
-  std::cout << "Created oct tree\n";
-  std::cout << "oct.size(): " << oct.size() << "\n";
-  ot::DA da (oct, PETSC_COMM_WORLD, PETSC_COMM_WORLD, 0.3);
-  std::cout << "Created DA\n";
+  if (!useOctree) {
+    // create DA
+    CHKERRQ ( DMDACreate3d ( PETSC_COMM_WORLD, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DMDA_STENCIL_BOX, 
+                      Ns+1, Ns+1, Ns+1, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE,
+                      1, 1, 0, 0, 0, &petscDA) );
 
+    // create vectors
+    CHKERRQ( DMCreateGlobalVector(petscDA, &rho) );
+    CHKERRQ( DMCreateGlobalVector(petscDA, &initialTemperature) );
+  } else {
+    // use octree
+    auto oct = buildOct();  // TODO pass in Ns
+    octDA = new ot::DA(oct, PETSC_COMM_WORLD, PETSC_COMM_WORLD, 0.3);
+
+    // create vectors 
+    octDA->createVector(rho, true, false, 1);
+    octDA->createVector(initialTemperature, false, true, 1);
+  }
+
+  std::cout << "Created DA and vectors" << std::endl;
   MPI_Barrier(PETSC_COMM_WORLD);
-  massMatrix* Mass = new massMatrix(feMat::OCT); // Mass Matrix
-  stiffnessMatrix* Stiffness = new stiffnessMatrix(feMat::OCT); // Stiffness matrix
-  forceVector* Force = new forceVector(feVec::OCT);  // force term
-  auto talyMat = new TalyMatrix<HTEquation, HTNodeData>(feMat::OCT);  // mass + stiffness matrix
 
-  // create vectors 
-  da.createVector(rho, true, false, 1);  // args??
-  da.createVector(initialTemperature, false, true, 1);
-
-  /*CHKERRQ( DMCreateGlobalVector(da, &rho) );
-  CHKERRQ( DMCreateGlobalVector(da, &initialTemperature) );*/
+  // set up equation
+  auto matType = (octDA ? feMat::OCT : feMat::PETSC);
+  massMatrix* Mass = new massMatrix(matType); // Mass Matrix
+  stiffnessMatrix* Stiffness = new stiffnessMatrix(matType); // Stiffness matrix
+  auto talyMat = new TalyMatrix<HTEquation, HTNodeData>(matType);  // mass + stiffness matrix
+  forceVector* Force = new forceVector(useOctree ? feVec::OCT : feVec::PETSC);  // force term
 
   // Set initial conditions
   CHKERRQ( VecSet ( initialTemperature, 0.0) ); 
   CHKERRQ( VecSet ( rho, 1.0 ) );
 
-  /*setScalarByFunction(da, Ns, initialTemperature, [](double x, double y, double z) {
-    return sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
-  });*/
+  if (petscDA) {
+    setScalarByFunction(petscDA, Ns, initialTemperature, [](double x, double y, double z) {
+      return sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
+    });
+  }
 
-  setScalarByFunction(&da, initialTemperature, [](double x, double y, double z) {
-    return sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
-  });
+  if (octDA) {
+    setScalarByFunction(octDA, initialTemperature, [](double x, double y, double z) {
+      return sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
+    });
+  }
 
   // print IC
-  octree2VTK(&da, initialTemperature, "ic");
+  if (petscDA) {
+    write_vector("ic", initialTemperature, petscDA);
+  }
 
-  // DONE - SET MATERIAL PROPERTIES ...
+  if (octDA) {
+    octree2VTK(octDA, initialTemperature, "ic");
+  }
 
   unsigned int numSteps = (unsigned int)(ceil(( ti.stop - ti.start)/ti.step));
   std::cout << "Numsteps is " << numSteps << std::endl;
 
   // Setup Matrices and Force Vector ...
   Mass->setProblemDimensions(1.0, 1.0, 1.0);
-  Mass->setDA(&da);
   Mass->setDof(dof);
 
   Stiffness->setProblemDimensions(1.0, 1.0, 1.0);
-  Stiffness->setDA(&da);
   Stiffness->setDof(dof);
   Stiffness->setNuVec(rho);
 
   talyMat->setProblemDimensions(1.0, 1.0, 1.0);
-  talyMat->setDA(&da);
   talyMat->setDof(dof);
 
   Force->setProblemDimensions(1.0, 1.0, 1.0);
-  Force->setDA(&da);
   Force->setDof(dof);
 
+  if (petscDA) {
+    Mass->setDA(petscDA);
+    Stiffness->setDA(petscDA);
+    Force->setDA(petscDA);
+    talyMat->setDA(petscDA);
+  }
+  if (octDA) {
+    Mass->setDA(octDA);
+    Stiffness->setDA(octDA);
+    Force->setDA(octDA);
+    talyMat->setDA(octDA);
+  }
 
   // time stepper ...
   parabolic *ts = new parabolic; 
@@ -246,7 +275,12 @@ int main(int argc, char **argv)
   ts->setTimeFrames(1);
 
   ts->setInitialTemperature(initialTemperature);
-  ts->setDAForMonitor(da);
+  if (petscDA) {
+    ts->setDAForMonitor(petscDA);
+  }
+  if (octDA) {
+    ts->setDAForMonitor(octDA);
+  }
 
   ts->setTimeInfo(&ti);
   ts->setAdjoint(false); // set if adjoint or forward

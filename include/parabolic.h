@@ -75,8 +75,8 @@ class parabolic : public timeStepper //<parabolic>
     m_da = da;
   }
 
-  inline void setDAForMonitor(ot::DA& da) {
-    m_octDA = &da;
+  inline void setDAForMonitor(ot::DA* da) {
+    m_octDA = da;
   }
 
  private:

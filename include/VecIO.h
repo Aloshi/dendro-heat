@@ -3,4 +3,4 @@
 #include "petscdmda.h"
 #include "petscsys.h"
 
-int write_vector(const char* fileName, Vec v, DM da);
+int write_vector(const char* file_prefix, Vec v, DM da);
