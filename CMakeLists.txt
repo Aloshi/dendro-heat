@@ -71,5 +71,5 @@ link_directories($ENV{PETSC_DIR}/$ENV{PETSC_ARCH}/lib
 ##---------------------------------------------------------------------------------------
 ##  Helper APPS
 ##---------------------------------------------------------------------------------------
-add_executable(dendroHeat src/main.cpp src/timeStepper.cpp src/TecplotIO_ascii.cpp src/VecIO.cpp src/DendroIO.cpp src/femUtils.cpp src/OctVTK.cpp src/interp.cpp)
+add_executable(dendroHeat src/main.cpp src/timeStepper.cpp src/TecplotIO_ascii.cpp src/VecIO.cpp src/DendroIO_plt.cpp src/DendroIO_vtk.cpp src/interp.cpp)
 target_link_libraries(dendroHeat dendro dendroDA petsc talyfem parmetis config++ ${MPI_LIBRARIES} m)

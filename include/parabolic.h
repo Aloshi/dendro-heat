@@ -19,7 +19,6 @@
 #include "VecIO.h"
 #include "rhs.h"
 #include "DendroIO.h"
-#include "OctVTK.h"
 
 /**
  *	@brief Main class for a linear parabolic problem
@@ -270,7 +269,7 @@ int parabolic::monitor()
       octree2VTK(*m_octDA, rank, data, ss.str().c_str());
       m_octDA->vecRestoreBuffer(m_vecSolution, data, false, false, true, dof);*/
       std::string asdf = ss.str();
-      saveNodalVecAsVTK(m_octDA, m_vecSolution, (char*) asdf.data());
+      octree2VTK(m_octDA, m_vecSolution, asdf);
     }
 
     /*PetscViewer view;

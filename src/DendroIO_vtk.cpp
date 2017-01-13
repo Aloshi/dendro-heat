@@ -1,9 +1,9 @@
-#include "OctVTK.h"
+#include "DendroIO.h"
 #include "interp.h"
 
 double gSize[3] = {1, 1, 1};
 
-void saveNodalVecAsVTK(ot::DA* da, Vec vec, char *file_prefix) {
+void octree2VTK(ot::DA* da, Vec vec, std::string file_prefix) {
   int rank, size;
   char fname[256];
 

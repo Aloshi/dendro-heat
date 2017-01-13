@@ -5,5 +5,5 @@
 #include "TreeNode.h"
 #include "oda.h"
 
-//void octree2VTK(const std::vector<ot::TreeNode>& nodes, unsigned int rank, const double* u, std::string vtk_file_name);
-void octree2VTK(ot::DA& da, unsigned int rank, const double* u, std::string file_name);
+void octree2PLT(ot::DA* da, Vec u, std::string file_prefix);
+void octree2VTK(ot::DA* da, Vec u, std::string file_prefix);

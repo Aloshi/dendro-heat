@@ -17,7 +17,6 @@ static char help[] = "Driver for heat";
 
 #include "timeInfo.h"
 #include "hcurvedata.h"
-#include "femUtils.h"
 //#include "feMatrix.h"
 //#include "feVector.h"
 //#include "femUtils.h"
@@ -34,7 +33,6 @@ static char help[] = "Driver for heat";
 #include "VecIO.h"
 #include "rhs.h"
 #include "DendroIO.h"
-#include "OctVTK.h"
 
 #include "TalyMat.h"
 #include "HTEquation.h"
@@ -300,7 +298,7 @@ int main(int argc, char **argv)
   //da.vecGetBuffer(initialTemperature, data, false, false, true, dof);
   //da.vecGetBuffer(elementalTemp, data, true, false, true, dof);
   //octree2VTK(da, rank, data, "ic.plt");
-  saveNodalVecAsVTK(&da, initialTemperature, "ic");
+  octree2VTK(&da, initialTemperature, "ic");
   //da.vecRestoreBuffer(initialTemperature, data, false, false, true, dof);
   //da.vecRestoreBuffer(elementalTemp, data, true, false, true, dof);
 }
