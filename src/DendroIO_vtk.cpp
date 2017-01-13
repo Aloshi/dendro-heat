@@ -10,8 +10,9 @@ void octree2VTK(ot::DA* da, Vec vec, std::string file_prefix) {
   
 	MPI_Comm_rank(da->getComm(), &rank);
 	MPI_Comm_size(da->getComm(), &size);
-  
-  sprintf(fname, "%s_%05d.vtk", file_prefix, rank);
+
+  std::stringstream ss;
+  sprintf(fname, "%s_%05d.vtk", file_prefix.c_str(), rank);
 
   if ( !rank ) std::cout << "Writing to VTK file: " << fname << std::endl;
 
