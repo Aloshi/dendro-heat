@@ -224,10 +224,10 @@ bool parabolic::setRHS()
 {
   VecZeroEntries(m_vecRHS);
 
-  ((forceVector*)m_Force)->setPrevTS(m_vecSolution);
-  if (m_TalyMat) {
-    m_Force->addVec(m_vecRHS, 1.0 / m_ti->step);
+  if (m_TalyVec) {
+    m_TalyVec->addVec_new(m_vecSolution, m_vecRHS, 1.0);
   } else {
+    ((forceVector*)m_Force)->setPrevTS(m_vecSolution);
     m_Force->addVec(m_vecRHS, 1.0/*1.0 / m_ti->step*/);
   }
   return true;

@@ -53,7 +53,7 @@ class HTEquation : public TALYFEMLIB::CEquation<HTNodeData> {
     // ValueFEM works for hermite because HTNodeData is ordered so that the
     // DU_PRE values come right after the U_PRE value.
     // (U_PRE, DU_PRE_1, DU_PRE_2, etc.)
-    const double u_pre_curr = p_data_->valueFEM(fe, U_PRE);
+    const double u_pre_curr = p_data_->valueFEM(fe, U);
 
     // in order to assemble the gauss point, we loop over each pair of basis
     // functions and calculate the individual contributions to the 'Ae' matrix

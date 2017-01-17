@@ -34,6 +34,8 @@ class timeStepper {
 
   int setForceVector(feVec* Force);
 
+  int setTalyVector(feVec* vec);
+
 
   
   int setAdjoint(bool flag);
@@ -193,6 +195,8 @@ class timeStepper {
   feMat* m_TalyMat;
 
   feVec* m_Force;
+
+  feVec* m_TalyVec;
   
   // Time stepper parameters
   double			m_dTimeStep;

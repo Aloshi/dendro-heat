@@ -10,6 +10,10 @@ class forceVector : public feVector<forceVector>
   forceVector(daType da);
 
   inline bool ElementalAddVec(unsigned int index, PetscScalar *in, double scale);
+  inline bool ElementalAddVec(PetscScalar*, PetscScalar*, PetscScalar* coords, double scale) {
+    assert(false);
+  }
+
   inline bool ElementalAddVec(int i, int j, int k, PetscScalar ***in, double scale);
     inline bool initStencils();
 

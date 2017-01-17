@@ -34,6 +34,7 @@ class feVec {
   
   //  virtual bool addVec(Vec _in, double scale=1.0) = 0;
   virtual bool addVec(Vec _in, double scale=1.0, int indx = -1) = 0;
+  virtual bool addVec_new(Vec _in, Vec _out, double scale=1.0, int indx = -1) = 0;
   virtual bool computeVec(Vec _in, Vec _out,double scale=1.0) = 0;
 
   void setProblemDimensions(double x, double y, double z) {

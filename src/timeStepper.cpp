@@ -9,6 +9,7 @@ timeStepper::timeStepper()
   m_Mass = NULL;
   m_Stiffness = NULL;
   m_TalyMat = NULL;
+  m_TalyVec = NULL;
 
   // Set initial displacement and velocity to null
   m_vecInitialSolution = NULL;
@@ -77,6 +78,11 @@ int timeStepper::setTalyMatrix(feMat* taly)
 {
   m_TalyMat = taly;
   return(0);
+}
+
+int timeStepper::setTalyVector(feVec* taly) {
+  m_TalyVec = taly;
+  return 0;
 }
 
 /**

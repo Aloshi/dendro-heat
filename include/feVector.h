@@ -46,6 +46,7 @@ class feVector : public feVec {
   void setName(std::string name);
 
   virtual bool addVec(Vec _in, double scale=1.0, int indx = -1);
+  virtual bool addVec_new(Vec _in, Vec _out, double scale=1.0, int indx = -1);
 
   virtual bool computeVec(Vec _in, Vec _out, double scale = 1.0);
   
@@ -55,6 +56,10 @@ class feVector : public feVec {
 
   inline bool ElementalAddVec(unsigned int index, PetscScalar *in, double scale) {
     return asLeaf().ElementalAddVec(index, in, scale);  
+  }
+
+  inline bool ElementalAddVec(PetscScalar* in, PetscScalar* out, PetscScalar* coords, double scale) {
+    return asLeaf().ElementalAddVec(in, out, coords, scale);  
   }
 
   inline bool ComputeNodalFunction(int i, int j, int k, PetscScalar ***in, PetscScalar ***out,double scale) {
@@ -498,6 +503,208 @@ bool feVector<T>::addVec(Vec _in, double scale, int indx){
 
   PetscFunctionReturn(0);
 }
+
+
+
+#undef __FUNCT__
+#define __FUNCT__ "feVector_AddVec_new_Indx"
+template <typename T>
+bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
+  PetscFunctionBegin;
+
+#ifdef __DEBUG__
+  assert ( ( m_daType == PETSC ) || ( m_daType == OCT ) );
+#endif
+
+  int ierr;
+  // PetscScalar zero=0.0;
+
+  m_iCurrentDynamicIndex = indx;
+  
+  if (m_daType == PETSC) {
+
+		PetscInt x,y,z,m,n,p;
+		PetscInt mx,my,mz;
+		int xne,yne,zne;
+
+		PetscScalar ***in, ***out;
+		Vec inlocal, outlocal;
+
+		/* Get all corners*/
+		if (m_DA == NULL)
+			std::cerr << "Da is null" << std::endl;
+		ierr = DMDAGetCorners(m_DA, &x, &y, &z, &m, &n, &p); CHKERRQ(ierr); 
+		/* Get Info*/
+		ierr = DMDAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0,0,0); CHKERRQ(ierr); 
+
+		if (x+m == mx) {
+			xne=m-1;
+		} else {
+			xne=m;
+		}
+		if (y+n == my) {
+			yne=n-1;
+		} else {
+			yne=n;
+		}
+		if (z+p == mz) {
+			zne=p-1;
+		} else {
+			zne=p;
+		}
+
+		// std::cout << x << "," << y << "," << z << " + " << xne <<","<<yne<<","<<zne<<std::endl;
+
+		// Get the local vector so that the ghost nodes can be accessed
+		ierr = DMGetLocalVector(m_DA, &inlocal); CHKERRQ(ierr);
+		ierr = DMGetLocalVector(m_DA, &outlocal); CHKERRQ(ierr);
+		// ierr = VecDuplicate(inlocal, &outlocal); CHKERRQ(ierr);
+
+		ierr = DMGlobalToLocalBegin(m_DA, _in, INSERT_VALUES, inlocal); CHKERRQ(ierr);
+		ierr = DMGlobalToLocalEnd(m_DA, _in, INSERT_VALUES, inlocal); CHKERRQ(ierr);
+		// ierr = DMGlobalToLocalBegin(m_DA, _out, INSERT_VALUES, outlocal); CHKERRQ(ierr);
+		// ierr = DMGlobalToLocalEnd(m_DA, _out, INSERT_VALUES, outlocal); CHKERRQ(ierr);
+
+		ierr = VecZeroEntries(outlocal);
+
+		ierr = DMDAVecGetArray(m_DA, inlocal, &in);
+		ierr = DMDAVecGetArray(m_DA, outlocal, &out);
+
+   
+		// Any derived class initializations ...
+		preAddVec();
+
+    double* local_in = new double[m_uiDof*8];
+    double* local_out = new double[m_uiDof*8];
+    double* coords = new double[8*3];
+
+    // loop through all elements ...
+    double hx = m_dLx/(mx -1);
+    double hy = m_dLy/(my -1);
+    double hz = m_dLz/(mz -1);
+    for (int k=z; k<z+zne; k++) {
+      for (int j=y; j<y+yne; j++) {
+        for (int i=x; i<x+xne; i++) {
+
+          // copy data to local
+          for (int p=k,idx=0; p<k+2; ++p) {
+            for (int q=j; q<j+2; ++q) {
+              for (int r=m_uiDof*i; r<m_uiDof*(i+2); ++r,++idx) {
+                local_in[idx] = in[r][q][p];
+                local_out[idx] = 0.0;
+              }
+            }
+          }
+
+          coords[0] = i*hx; coords[1] = j*hy; coords[2] = k*hz;
+          coords[3] = (i+1)*hx; coords[4] = j*hy; coords[5] = k*hz;
+          coords[6] = i*hx; coords[7] = (j+1)*hy; coords[8] = k*hz;
+          coords[9] = (i+1)*hx; coords[10] = (j+1)*hy; coords[11] = k*hz;
+          coords[12] = i*hx; coords[13] = j*hy; coords[14] = (k+1)*hz;
+          coords[15] = (i+1)*hx; coords[16] = j*hy; coords[17] = (k+1)*hz;
+          coords[18] = i*hx; coords[19] = (j+1)*hy; coords[20] = (k+1)*hz;
+          coords[21] = (i+1)*hx; coords[22] = (j+1)*hy; coords[23] = (k+1)*hz;
+
+          int map[8] = {
+            0, 1, 3, 2, 4, 5, 7, 6
+          };
+          double taly_coords[8*3];
+          for (int p = 0; p < 8; p++) {
+            taly_coords[map[p]*3+0] = coords[p*3+0];
+            taly_coords[map[p]*3+1] = coords[p*3+1];
+            taly_coords[map[p]*3+2] = coords[p*3+2];
+          }
+
+          double* local_in_taly = new double[m_uiDof*8];
+          double* local_out_taly = new double[m_uiDof*8];
+          for (int p = 0; p < 8; p++) {
+            local_in_taly[map[p]] = local_in[p];
+            local_out_taly[p] = 0.0;
+          }
+
+          ElementalAddVec(local_in_taly, local_out_taly, taly_coords, scale);
+
+          for (int p = 0; p < 8; p++) {
+            local_out[p] = local_out_taly[map[p]];
+          }
+
+          delete[] local_in_taly;
+          delete[] local_out_taly;
+
+          // copy data back
+          for (int p=k,idx=0; p<k+2; ++p) {
+            for (int q=j; q<j+2; ++q) {
+              for (int r=m_uiDof*i; r<m_uiDof*(i+2); ++r,++idx) {
+                out[r][q][p] += local_out[idx];
+                //std::cout << "in[p][q][r] = " << local_out[idx] << "\n";
+              }
+            }
+          }
+        } // end i
+      } // end j
+    } // end k
+
+    delete[] local_in;
+    delete[] local_out;
+    delete[] coords;
+
+		postAddVec();
+
+		ierr = DMDAVecRestoreArray(m_DA, inlocal, &in); CHKERRQ(ierr);  
+		ierr = DMDAVecRestoreArray(m_DA, outlocal, &out); CHKERRQ(ierr);  
+
+		ierr = DMLocalToGlobalBegin(m_DA, outlocal, ADD_VALUES, _out); CHKERRQ(ierr);  
+		ierr = DMLocalToGlobalEnd(m_DA, outlocal, ADD_VALUES, _out); CHKERRQ(ierr);  
+
+		ierr = DMRestoreLocalVector(m_DA, &inlocal); CHKERRQ(ierr);  
+		ierr = DMRestoreLocalVector(m_DA, &outlocal); CHKERRQ(ierr);  
+		// ierr = VecDestroy(outlocal); CHKERRQ(ierr);  
+
+  } else {
+    // loop for octree DA.
+    assert(false);
+
+    // PetscScalar *out=NULL;
+    PetscScalar *in=NULL; 
+
+    // get Buffers ...
+    //Nodal,Non-Ghosted,Read,1 dof, Get in array and get ghosts during computation
+    m_octDA->vecGetBuffer(_in,   in, false, false, false,  m_uiDof);
+
+    
+    // start comm for in ...
+    //m_octDA->updateGhostsBegin<PetscScalar>(in, false, m_uiDof);
+    //m_octDA->ReadFromGhostsBegin<PetscScalar>(in, false, m_uiDof);
+    m_octDA->ReadFromGhostsBegin<PetscScalar>(in, m_uiDof);
+    preAddVec();
+
+    // Independent loop, loop through the nodes this processor owns..
+    for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
+      ElementalAddVec( m_octDA->curr(), in, scale); 
+    }//end INDEPENDENT
+
+    // Wait for communication to end.
+    //m_octDA->updateGhostsEnd<PetscScalar>(in);
+	 m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
+	 
+    // Dependent loop ...
+    for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>();m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
+      ElementalAddVec( m_octDA->curr(), in, scale); 
+    }//end DEPENDENT
+
+    postAddVec();
+
+    // Restore Vectors ...
+    m_octDA->vecRestoreBuffer(_in,   in, false, false, false,  m_uiDof);
+
+  }
+
+  PetscFunctionReturn(0);
+}
+
+
+
+
 
 /**
  * 	@brief		The nonlinear reaction term used in operator splitting or any node related functions

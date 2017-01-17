@@ -21,6 +21,7 @@ static char help[] = "Driver for heat";
 #include "DendroIO.h"
 
 #include "TalyMat.h"
+#include "TalyVec.h"
 #include "HTEquation.h"
 
 
@@ -204,10 +205,12 @@ int main(int argc, char **argv)
 
   // set up equation
   auto matType = (octDA ? feMat::OCT : feMat::PETSC);
+  auto vecType = (octDA ? feVec::OCT : feVec::PETSC);
   massMatrix* Mass = new massMatrix(matType); // Mass Matrix
   stiffnessMatrix* Stiffness = new stiffnessMatrix(matType); // Stiffness matrix
   auto talyMat = new TalyMatrix<HTEquation, HTNodeData>(matType);  // mass + stiffness matrix
-  forceVector* Force = new forceVector(useOctree ? feVec::OCT : feVec::PETSC);  // force term
+  forceVector* Force = new forceVector(vecType);  // force term
+  auto talyVec = new TalyVector<HTEquation, HTNodeData>(vecType);
 
   // Set initial conditions
   CHKERRQ( VecSet ( initialTemperature, 0.0) ); 
@@ -251,17 +254,22 @@ int main(int argc, char **argv)
   Force->setProblemDimensions(1.0, 1.0, 1.0);
   Force->setDof(dof);
 
+  talyVec->setProblemDimensions(1.0, 1.0, 1.0);
+  talyVec->setDof(dof);
+
   if (petscDA) {
     Mass->setDA(petscDA);
     Stiffness->setDA(petscDA);
     Force->setDA(petscDA);
     talyMat->setDA(petscDA);
+    talyVec->setDA(petscDA);
   }
   if (octDA) {
     Mass->setDA(octDA);
     Stiffness->setDA(octDA);
     Force->setDA(octDA);
     talyMat->setDA(octDA);
+    talyVec->setDA(octDA);
   }
 
   // time stepper ...
@@ -269,9 +277,11 @@ int main(int argc, char **argv)
 
   //ts->setMassMatrix(Mass);
   //ts->setStiffnessMatrix(Stiffness);
-  ts->setTalyMatrix(talyMat);
+  //ts->setForceVector(Force);
 
-  ts->setForceVector(Force);
+  ts->setTalyMatrix(talyMat);
+  ts->setTalyVector(talyVec);
+
   ts->setTimeFrames(1);
 
   ts->setInitialTemperature(initialTemperature);
