@@ -505,6 +505,37 @@ bool feVector<T>::addVec(Vec _in, double scale, int indx){
 }
 
 
+/*// morton -> taly ordering
+inline void dendro_to_taly(void* dest, void* src, size_t bytes)
+{
+  // maps morton (Dendro) indices to TalyFEM order
+  // 2----3        3----2
+  // |    |   ->   |    |
+  // 0----1        0----1
+  static const int morton_to_taly_map[8] = {
+    0, 1, 3, 2, 4, 5, 7, 6
+  };
+
+  for (int i = 0; i < 8; i++) {
+    memcpy(static_cast<char*>(dest) + bytes*morton_to_taly_map[i],
+           static_cast<char*>(src)  + bytes*i,
+           bytes);
+  }
+}
+
+// taly -> morton ordering
+inline void taly_to_dendro(void* dest, void* src, size_t bytes)
+{
+  static const int morton_to_taly_map[8] = {
+    0, 1, 3, 2, 4, 5, 7, 6
+  };
+
+  for (int i = 0; i < 8; i++) {
+    memcpy(static_cast<char*>(dest) + bytes*i,
+           static_cast<char*>(src)  + bytes*morton_to_taly_map[i],
+           bytes);
+  }
+}*/
 
 #undef __FUNCT__
 #define __FUNCT__ "feVector_AddVec_new_Indx"
@@ -636,6 +667,7 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
             for (int q=j; q<j+2; ++q) {
               for (int r=m_uiDof*i; r<m_uiDof*(i+2); ++r,++idx) {
                 out[r][q][p] += local_out[idx];
+                //std::cout << "out[" << r << "][" << q << "][" << p << "] += " << local_out[idx] << "\n";
                 //std::cout << "in[p][q][r] = " << local_out[idx] << "\n";
               }
             }
@@ -662,44 +694,140 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
 
   } else {
     // loop for octree DA.
-    assert(false);
 
-    // PetscScalar *out=NULL;
-    PetscScalar *in=NULL; 
 
-    // get Buffers ...
-    //Nodal,Non-Ghosted,Read,1 dof, Get in array and get ghosts during computation
-    m_octDA->vecGetBuffer(_in,   in, false, false, false,  m_uiDof);
+		PetscScalar *out=NULL;
+		PetscScalar *in=NULL; 
 
-    
-    // start comm for in ...
-    //m_octDA->updateGhostsBegin<PetscScalar>(in, false, m_uiDof);
-    //m_octDA->ReadFromGhostsBegin<PetscScalar>(in, false, m_uiDof);
-    m_octDA->ReadFromGhostsBegin<PetscScalar>(in, m_uiDof);
-    preAddVec();
+		// get Buffers ...
+		//Nodal,Non-Ghosted,Read,1 dof, Get in array and get ghosts during computation
+		m_octDA->vecGetBuffer(_in,   in, false, false, true,  m_uiDof);
+		m_octDA->vecGetBuffer(_out, out, false, false, false, m_uiDof);
 
-    // Independent loop, loop through the nodes this processor owns..
-    for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
-      ElementalAddVec( m_octDA->curr(), in, scale); 
-    }//end INDEPENDENT
+		// start comm for in ...
+		//m_octDA->updateGhostsBegin<PetscScalar>(in, false, m_uiDof);
+		// m_octDA->ReadFromGhostsBegin<PetscScalar>(in, false, m_uiDof);
+		m_octDA->ReadFromGhostsBegin<PetscScalar>(in, m_uiDof);
+		preAddVec();
 
-    // Wait for communication to end.
-    //m_octDA->updateGhostsEnd<PetscScalar>(in);
-	 m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
-	 
-    // Dependent loop ...
-    for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>();m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
-      ElementalAddVec( m_octDA->curr(), in, scale); 
-    }//end DEPENDENT
+		const unsigned int maxD = m_octDA->getMaxDepth();
+		const double xFac = m_dLx/((double)(1<<(maxD-1)));
+		const double yFac = m_dLy/((double)(1<<(maxD-1)));
+		const double zFac = m_dLz/((double)(1<<(maxD-1)));
 
-    postAddVec();
+    PetscScalar* local_in = new PetscScalar[m_uiDof*8];
+    PetscScalar* local_out = new PetscScalar[m_uiDof*8];
+    PetscScalar* node_data_temp = new PetscScalar[m_uiDof*8];  // scratch
+    double coords[8*3];
 
-    // Restore Vectors ...
-    m_octDA->vecRestoreBuffer(_in,   in, false, false, false,  m_uiDof);
+		// Independent loop, loop through the nodes this processor owns..
+		for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
 
-  }
+			int lev = m_octDA->getLevel(m_octDA->curr());
+      Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
+      Point pt = m_octDA->getCurrentOffset();
+      pt.x() *= xFac;
+      pt.y() *= yFac;
+      pt.z() *= zFac;
 
-  PetscFunctionReturn(0);
+      unsigned int node_idxes[8];  // holds node IDs; in[m_uiDof*idx[i]] for data
+
+      //stdElemType elemType;
+      //alignElementAndVertices(m_octDA, elemType, node_idxes);       
+
+      m_octDA->getNodeIndices(node_idxes);
+
+      // build node coordinates (fill coords)
+      build_taly_coordinates(coords, pt, h);
+
+      // interpolate (local_in -> node_data_temp) TODO check order of arguments
+      interp_global_to_local(in, node_data_temp, m_octDA);  // TODO doesn't take into account ndof
+
+      // map from dendro order to taly order (node_data_temp -> local_in);
+      // TODO move to TalyMatrix
+      dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
+
+      // initialize local_out?
+      for (int i = 0; i < 8; i++) {
+        // TODO m_uiDof
+        local_out[i] = 0.0;
+      }
+
+      // calculate values (fill local_out)
+      ElementalAddVec(local_in, local_out, coords, scale);
+
+      // remap back to Dendro format (local_out -> node_data_temp)
+      // TODO move to TalyMatrix
+      taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
+
+      // interpolate hanging nodes (node_data_temp -> local_out)
+      // need to zero out local_out first, interp is additive
+      // for some reason
+      /*for (int i = 0; i < 8; i++) {
+        for (int dof = 0; dof < m_uiDof; dof++) {
+          local_out[i*m_uiDof + dof] = 0.0;
+        }
+      }*/
+      interp_local_to_global(node_data_temp, out, m_octDA);  // TODO doesn't take into account ndof
+		}//end INDEPENDENT
+
+		// Wait for communication to end.
+		//m_octDA->updateGhostsEnd<PetscScalar>(in);
+		m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
+
+		// Dependent loop ...
+		for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
+
+			int lev = m_octDA->getLevel(m_octDA->curr());
+      Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
+      Point pt = m_octDA->getCurrentOffset();
+      pt.x() *= xFac;
+      pt.y() *= yFac;
+      pt.z() *= zFac;
+
+      unsigned int node_idxes[8];  // holds node IDs; in[m_uiDof*idx[i]] for data
+      m_octDA->getNodeIndices(node_idxes);
+
+      // build node coordinates (fill coords)
+      build_taly_coordinates(coords, pt, h);
+
+      // interpolate (local_in -> node_data_temp) TODO check order of arguments
+      interp_global_to_local(in, node_data_temp, m_octDA);  // TODO doesn't take into account ndof
+
+      // map from dendro order to taly order (node_data_temp -> local_in);
+      // TODO move to TalyMatrix
+      dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
+
+      // initialize local_out?
+      for (int i = 0; i < 8; i++) {
+        // TODO m_uiDof
+        local_out[i] = 0.0;
+      }
+
+      // calculate values (fill local_out)
+      ElementalAddVec(local_in, local_out, coords, scale);
+
+      // remap back to Dendro format (local_out -> node_data_temp)
+      // TODO move to TalyMatrix
+      taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
+
+      // interpolate hanging nodes (node_data_temp -> local_out)
+      interp_local_to_global(node_data_temp, out, m_octDA);  // TODO doesn't take into account ndof
+		}//end DEPENDENT
+
+    delete[] local_in;
+    delete[] local_out;
+    delete[] node_data_temp;
+
+		postAddVec();
+
+		// Restore Vectors ...
+		m_octDA->vecRestoreBuffer(_in,   in, false, false, true,  m_uiDof);
+		m_octDA->vecRestoreBuffer(_out, out, false, false, false, m_uiDof);
+
+	}
+
+	PetscFunctionReturn(0);
 }
 
 
