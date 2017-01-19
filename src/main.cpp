@@ -139,7 +139,7 @@ int main(int argc, char **argv)
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  int Ns = 12;
+  int Ns = 16;
   unsigned int dof = 1;
 
   char problemName[PETSC_MAX_PATH_LEN];
@@ -234,7 +234,7 @@ int main(int argc, char **argv)
   }
 
   if (octDA) {
-    octree2VTK(octDA, initialTemperature, "ic");
+    //octree2VTK(octDA, initialTemperature, "ic");
   }
 
   unsigned int numSteps = (unsigned int)(ceil(( ti.stop - ti.start)/ti.step));

@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 2.8)
 project(dendro)
 
-set (DENDRO_DIR /home/lofquist/Dendro4)
-set (TALYFEM_DIR /home/lofquist/taly_fem)
-set (LIBCONFIG_DIR /home/lofquist/LIBS/libconfig-1.5/install)
+set (PETSC_DIR /home/songzhex/PACKAGES/petsc-3.5.4)
+set (PETSC_ARCH arch-linux2-cxx-debug)
+set (DENDRO_DIR /home/songzhex/Downloads/Dendro4)
+set (TALYFEM_DIR /home/songzhex/PACKAGES/taly_fem_7.1)
+set (LIBCONFIG_DIR /home/songzhex/PACKAGES/libconfig-1.5/install)
 
 # version number
 set (Dendro_VERSION_MAJOR 4)
@@ -42,7 +44,6 @@ set(LINK_FLAGS "${LINK_FLAGS} -rdynamic")
 
 ##------
 include_directories(${PROJECT_BINARY_DIR}
-                    ${MPI_INCLUDE_PATH}
                     include
                     ${DENDRO_DIR}/build
                     ${DENDRO_DIR}/include
@@ -55,6 +56,7 @@ include_directories(${PROJECT_BINARY_DIR}
                     $ENV{PETSC_DIR}/$ENV{PETSC_ARCH}/include
                     ${TALYFEM_DIR}
                     ${LIBCONFIG_DIR}/include
+                    ${MPI_INCLUDE_PATH}
                     )
 
 link_directories($ENV{PETSC_DIR}/$ENV{PETSC_ARCH}/lib
@@ -71,5 +73,5 @@ link_directories($ENV{PETSC_DIR}/$ENV{PETSC_ARCH}/lib
 ##---------------------------------------------------------------------------------------
 ##  Helper APPS
 ##---------------------------------------------------------------------------------------
-add_executable(dendroHeat src/main.cpp src/timeStepper.cpp src/TecplotIO_ascii.cpp src/VecIO.cpp src/DendroIO_plt.cpp src/DendroIO_vtk.cpp src/interp.cpp)
+add_executable(dendroHeat src/main.cpp src/timeStepper.cpp src/TecplotIO_ascii.cpp src/VecIO.cpp src/DendroIO_vtk.cpp src/DendroIO_plt.cpp src/interp.cpp)
 target_link_libraries(dendroHeat dendro dendroDA petsc talyfem parmetis config++ ${MPI_LIBRARIES} m)

@@ -66,6 +66,7 @@ class feMatrix : public feMat {
   virtual bool MatGetDiagonal(Vec _diag, double scale=1.0);
 
   virtual bool GetAssembledMatrix(Mat *J, MatType mtype);
+  virtual bool GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in);
 
   /**
    * 	@brief		The elemental matrix-vector multiplication routine that is used
@@ -122,6 +123,10 @@ class feMatrix : public feMat {
 
   inline bool ElementalMatVec(PetscScalar* in_local, PetscScalar* out_local, PetscScalar* coords, double scale) {
     return asLeaf().ElementalMatVec(in_local, out_local, coords, scale);
+  }
+
+  inline bool GetElementalMatrix(PetscScalar* in_local, PetscScalar* coords, PetscScalar *mat) {
+    return asLeaf().GetElementalMatrix(in_local, coords, mat);  
   }
 
   /**
@@ -982,6 +987,402 @@ bool feMatrix<T>::GetAssembledMatrix(Mat *J, MatType mtype) {
 	PetscFunctionReturn(0);
 }
 
+
+template <typename T>
+bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
+	PetscFunctionBegin;
+
+	int ierr;
+
+#ifdef __DEBUG__
+	assert ( ( m_daType == PETSC ) || ( m_daType == OCT ) );
+#endif
+	if (m_daType == PETSC) {
+		//Mat K;
+
+		// Petsc Part ..
+		unsigned int elemMatSize = m_uiDof*8;
+
+		PetscScalar* Ke = new PetscScalar[elemMatSize*elemMatSize];
+	    	PetscScalar* Ke_copy = new PetscScalar[elemMatSize*elemMatSize];
+		MatStencil *idx = new MatStencil[elemMatSize];
+
+		PetscInt x,y,z,m,n,p;
+		PetscInt mx,my,mz;
+		int xne,yne,zne;
+
+		/* Get all corners*/
+		if (m_DA == NULL)
+			std::cerr << "Da is null" << std::endl;
+		ierr = DMDAGetCorners(m_DA, &x, &y, &z, &m, &n, &p); CHKERRQ(ierr); 
+		/* Get Info*/
+		ierr = DMDAGetInfo(m_DA,0, &mx, &my, &mz, 0,0,0,0,0,0,0,0,0); CHKERRQ(ierr); 
+
+		if (x+m == mx) {
+			xne=m-1;
+		} else {
+			xne=m;
+		}
+		if (y+n == my) {
+			yne=n-1;
+		} else {
+			yne=n;
+		}
+		if (z+p == mz) {
+			zne=p-1;
+		} else {
+			zne=p;
+		}
+
+		PetscScalar ***in;
+		Vec inlocal;
+
+		
+		// Get the local vector so that the ghost nodes can be accessed
+		ierr = DMGetLocalVector(m_DA, &inlocal); CHKERRQ(ierr);
+
+
+		ierr = DMGlobalToLocalBegin(m_DA, _in, INSERT_VALUES, inlocal); CHKERRQ(ierr);
+		ierr = DMGlobalToLocalEnd(m_DA, _in, INSERT_VALUES, inlocal); CHKERRQ(ierr);
+
+
+		ierr = DMDAVecGetArray(m_DA, inlocal, &in);
+		
+		// Get the matrix from the DA ...
+		//DMCreateMatrix(m_DA, &K);
+		//MatZeroEntries(K);
+
+		preMatVec();
+		// loop through all elements ...
+		
+		double* local_in = new double[m_uiDof*8];
+    		double* coords = new double[8*3];
+
+		double hx = m_dLx/(mx -1);
+    		double hy = m_dLy/(my -1);
+    		double hz = m_dLz/(mz -1);
+
+		for (int k=z; k<z+zne; k++) {
+			for (int j=y; j<y+yne; j++) {
+				for (int i=x; i<x+xne; i++) {
+					int idxMap[8][3]={
+						{k, j, i},
+						{k,j,i+1},
+						{k,j+1,i},
+						{k,j+1,i+1},
+						{k+1, j, i},
+						{k+1,j,i+1},
+						{k+1,j+1,i},
+						{k+1,j+1,i+1}               
+					};
+					for (unsigned int q=0; q<8; q++) {
+						for (unsigned int dof=0; dof<m_uiDof; dof++) {
+							idx[m_uiDof*q + dof].i = idxMap[q][2];
+							idx[m_uiDof*q + dof].j = idxMap[q][1];
+							idx[m_uiDof*q + dof].k = idxMap[q][0];
+							idx[m_uiDof*q + dof].c = dof;
+						}
+					}
+
+					// loop through all elements ...
+    
+   
+
+          				// copy data to local
+          				for (int p=k,idx_local=0; p<k+2; ++p) {
+            					for (int q=j; q<j+2; ++q) {
+              						for (int r=m_uiDof*i; r<m_uiDof*(i+2); ++r,++idx_local) {
+                						local_in[idx_local] = in[r][q][p];
+                
+              						}
+            					}
+          				}
+
+          				coords[0] = i*hx; coords[1] = j*hy; coords[2] = k*hz;
+          				coords[3] = (i+1)*hx; coords[4] = j*hy; coords[5] = k*hz;
+					coords[6] = i*hx; coords[7] = (j+1)*hy; coords[8] = k*hz;
+					coords[9] = (i+1)*hx; coords[10] = (j+1)*hy; coords[11] = k*hz;
+					coords[12] = i*hx; coords[13] = j*hy; coords[14] = (k+1)*hz;
+					coords[15] = (i+1)*hx; coords[16] = j*hy; coords[17] = (k+1)*hz;
+					coords[18] = i*hx; coords[19] = (j+1)*hy; coords[20] = (k+1)*hz;
+					coords[21] = (i+1)*hx; coords[22] = (j+1)*hy; coords[23] = (k+1)*hz;
+
+					int map[8] = {
+				   		//0, 1, 4, 5, 3, 2, 7, 6
+						0, 1, 3, 2, 4, 5, 7, 6
+					    	//0, 1, 2, 3, 4, 5, 6, 7
+					};
+					double taly_coords[8*3];
+					for (int p = 0; p < 8; p++) {
+					  taly_coords[map[p]*3+0] = coords[p*3+0];
+					  taly_coords[map[p]*3+1] = coords[p*3+1];
+					  taly_coords[map[p]*3+2] = coords[p*3+2];
+					}
+
+					double* local_in_taly = new double[m_uiDof*8];
+					for (int p = 0; p < 8; p++) {
+					  local_in_taly[map[p]] = local_in[p];
+					   
+					}
+
+					GetElementalMatrix(local_in_taly,taly_coords, Ke);
+					for (int k = 0; k < 8; k++) {
+      						for (int j=0; j<8; j++) {
+							Ke_copy[8*k+j] = Ke[8*k+j];
+      						}
+    					}
+					
+					for (int k = 0; k < 8; k++) {
+      						for (int j=0; j<8; j++) {
+							Ke[8*k+j] = Ke_copy[8*map[k]+map[j]];
+      						}
+    					}
+					/*std::cout << "mat = [";
+					for (int k = 0; k < 8; k++) {
+      						for (int j=0; j<8; j++) {
+							std::cout << Ke[8*k+j] << ", ";
+							//std::cout<<"mat["<<k<<"]["<<j<<"] = "<<"  "<<Ke[8*k+j]<<std::endl;
+      						}
+						std::cout << std::endl << "       ";
+    					}
+					std::cout << std::endl;*/
+
+					delete[] local_in_taly;
+					
+					
+					// Set Values 
+					// @check if rows/cols need to be interchanged.
+					MatSetValuesStencil(*J, elemMatSize, idx, elemMatSize, idx, Ke, ADD_VALUES);
+
+					/*for (int k = 0; k < 8; k++) {
+      						for (int j=0; j<8; j++) {
+							std::cout<<"mat["<<k<<"]["<<j<<"] = "<<K[8*k+j]<<std::endl;
+      						}
+    					}*/
+				} // end i
+			} // end j
+		} // end k
+
+		delete[] local_in;
+    		delete[] coords;
+		
+		postMatVec();
+
+		MatAssemblyBegin (*J, MAT_FINAL_ASSEMBLY);
+		MatAssemblyEnd   (*J, MAT_FINAL_ASSEMBLY);
+
+		//*J = K;
+
+		delete [] Ke;
+		delete [] idx;
+
+	} else {
+		
+		// Octree part ...
+		
+		unsigned int elemMatSize = m_uiDof*8;
+		int map[8] = {
+				//0, 1, 4, 5, 3, 2, 7, 6
+				0, 1, 3, 2, 4, 5, 7, 6
+				//0, 1, 2, 3, 4, 5, 6, 7
+			     };
+
+///////////////////////////////////////////////////////////////////////////////////
+		if(!(m_octDA->computedLocalToGlobal())) {
+			m_octDA->computeLocalToGlobalMappings();
+		}
+
+		/*char matType[30];
+		PetscBool typeFound;
+		PetscOptionsGetString(PETSC_NULL, "-fullJacMatType", matType, 30, &typeFound);
+		if(!typeFound) {
+			std::cout<<"I need a MatType for the full Jacobian matrix!"<<std::endl;
+			MPI_Finalize();
+			exit(0);		
+		}*/
+		//m_octDA->createMatrix(*J, matType, 1);
+		MatZeroEntries(*J);
+		std::vector<ot::MatRecord> records;
+
+		PetscScalar* Ke = new PetscScalar[elemMatSize*elemMatSize];
+	    	PetscScalar* Ke_copy = new PetscScalar[elemMatSize*elemMatSize];
+		PetscScalar *in=NULL; 
+		// get Buffers ...
+		//Nodal,Non-Ghosted,Read,1 dof, Get in array and get ghosts during computation
+		m_octDA->vecGetBuffer(_in,   in, false, false, true,  m_uiDof);
+
+		// start comm for in ...
+		//m_octDA->updateGhostsBegin<PetscScalar>(in, false, m_uiDof);
+		// m_octDA->ReadFromGhostsBegin<PetscScalar>(in, false, m_uiDof);
+		m_octDA->ReadFromGhostsBegin<PetscScalar>(in, m_uiDof);
+		preMatVec();
+
+		const unsigned int maxD = m_octDA->getMaxDepth();
+		const double xFac = m_dLx/((double)(1<<(maxD-1)));
+		const double yFac = m_dLy/((double)(1<<(maxD-1)));
+		const double zFac = m_dLz/((double)(1<<(maxD-1)));
+
+    		PetscScalar* local_in = new PetscScalar[m_uiDof*8];
+		PetscScalar* local_out = new PetscScalar[m_uiDof*8];
+    		PetscScalar* node_data_temp = new PetscScalar[m_uiDof*8];  // scratch
+   		 double coords[8*3];
+
+		// Independent loop, loop through the nodes this processor owns..
+		for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
+
+			int lev = m_octDA->getLevel(m_octDA->curr());
+      			Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
+      			Point pt = m_octDA->getCurrentOffset();
+      			pt.x() *= xFac;
+      			pt.y() *= yFac;
+      			pt.z() *= zFac;
+
+      			unsigned int node_idxes[8];  // holds node IDs; in[m_uiDof*idx[i]] for data
+
+     	 		//stdElemType elemType;
+      			//alignElementAndVertices(m_octDA, elemType, node_idxes);       
+
+      			m_octDA->getNodeIndices(node_idxes);
+
+      			// build node coordinates (fill coords)
+      			build_taly_coordinates(coords, pt, h);
+
+      			// interpolate (local_in -> node_data_temp) TODO check order of arguments
+      			interp_global_to_local(in, node_data_temp, m_octDA);  // TODO doesn't take into account ndof
+
+      			// map from dendro order to taly order (node_data_temp -> local_in);
+      			// TODO move to TalyMatrix
+      			dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
+				
+      			// calculate values (fill local_out)
+      			GetElementalMatrix(local_in, coords, Ke);	
+
+      			// remap back to Dendro format (local_out -> node_data_temp)
+      			// TODO move to TalyMatrix
+      			//taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
+
+			//change the Ke mapping
+			//*******************************************//
+			for (int k = 0; k < 8; k++) {
+      				for (int j=0; j<8; j++) {
+					Ke_copy[8*k+j] = Ke[8*k+j];
+      				}
+    			}
+					
+			for (int k = 0; k < 8; k++) {
+      				for (int j=0; j<8; j++) {
+					Ke[8*k+j] = Ke_copy[8*map[k]+map[j]];
+      				}
+    			}
+
+      			// interpolate hanging nodes (node_data_temp -> local_out)
+      			// need to zero out local_out first, interp is additive
+      			// for some reason
+      			/*for (int i = 0; i < 8; i++) {
+        			for (int dof = 0; dof < m_uiDof; dof++) {
+          				local_out[i*m_uiDof + dof] = 0.0;
+        			}
+      			}*/
+      			interp_local_to_global_matrix(Ke, records, m_octDA);  // TODO doesn't take into account ndof
+			// TODO How to interpolate this back ???
+			//********************************************//
+			if(records.size() > 500) {
+				m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
+			}
+		}//end INDEPENDENT
+
+		m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
+
+		// Wait for communication to end.
+		//m_octDA->updateGhostsEnd<PetscScalar>(in);
+		m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
+
+		// Dependent loop ...
+		for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
+
+			
+			int lev = m_octDA->getLevel(m_octDA->curr());
+      			Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
+      			Point pt = m_octDA->getCurrentOffset();
+      			pt.x() *= xFac;
+      			pt.y() *= yFac;
+      			pt.z() *= zFac;
+
+      			unsigned int node_idxes[8];  // holds node IDs; in[m_uiDof*idx[i]] for data
+
+     	 		//stdElemType elemType;
+      			//alignElementAndVertices(m_octDA, elemType, node_idxes);       
+
+      			m_octDA->getNodeIndices(node_idxes);
+
+      			// build node coordinates (fill coords)
+      			build_taly_coordinates(coords, pt, h);
+
+      			// interpolate (local_in -> node_data_temp) TODO check order of arguments
+      			interp_global_to_local(in, node_data_temp, m_octDA);  // TODO doesn't take into account ndof
+
+      			// map from dendro order to taly order (node_data_temp -> local_in);
+      			// TODO move to TalyMatrix
+      			dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
+
+      			// calculate values (fill local_out)
+      			GetElementalMatrix(local_in, coords, Ke);	
+
+			//change the Ke mapping
+			//*******************************************//
+			for (int k = 0; k < 8; k++) {
+      				for (int j=0; j<8; j++) {
+					Ke_copy[8*k+j] = Ke[8*k+j];
+      				}
+    			}
+					
+			for (int k = 0; k < 8; k++) {
+      				for (int j=0; j<8; j++) {
+					Ke[8*k+j] = Ke_copy[8*map[k]+map[j]];
+      				}
+    			}
+
+			
+      			// remap back to Dendro format (local_out -> node_data_temp)
+      			// TODO move to TalyMatrix
+      			//taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
+
+      			// interpolate hanging nodes (node_data_temp -> local_out)
+      			// need to zero out local_out first, interp is additive
+      			// for some reason
+      			/*for (int i = 0; i < 8; i++) {
+        			for (int dof = 0; dof < m_uiDof; dof++) {
+          				local_out[i*m_uiDof + dof] = 0.0;
+        			}
+      			}*/
+			// TODO How to interpolate this back ???
+			//********************************************//
+      			interp_local_to_global_matrix(Ke, records, m_octDA);  // TODO doesn't take into account ndof
+
+			if(records.size() > 500) {
+				m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
+			}
+		}//end DEPENDENT
+
+		m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
+
+		postMatVec();
+
+		MatAssemblyBegin(*J, MAT_FINAL_ASSEMBLY);
+		MatAssemblyEnd(*J, MAT_FINAL_ASSEMBLY);
+
+    		delete[] local_in;
+		delete[] local_out;
+    		delete[] node_data_temp;
+
+
+		// Restore Vectors ...
+		m_octDA->vecRestoreBuffer(_in,   in, false, false, true,  m_uiDof);
+
+	}
+
+	PetscFunctionReturn(0);
+}
 
 #undef __FUNCT__
 #define __FUNCT__ "alignElementAndVertices"

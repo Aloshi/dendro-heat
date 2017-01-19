@@ -44,6 +44,47 @@ class TalyMatrix : public feMatrix< TalyMatrix<Equation, NodeData> >
     be_.redim(8);
   }
 
+  inline bool GetElementalMatrix(int i, int j, int k, PetscScalar *mat){
+    assert(false);
+  }
+
+  inline bool GetElementalMatrix(unsigned int index, std::vector<ot::MatRecord>& records){
+    assert(false);
+  }
+
+  inline bool GetElementalMatrix(PetscScalar* in_local, PetscScalar* coords, PetscScalar *mat){
+   
+    const int ndof = 1;  // TODO
+
+    // update node coordinates and values
+    for (unsigned int i = 0; i < 8; i++) {
+      taly_grid_.node_array_[i]->setCoor(coords[i*3], coords[i*3+1], coords[i*3+2]);
+
+      for (unsigned int dof = 0; dof < ndof; dof++) {
+        taly_gf_.GetNodeData(i).value(dof) = in_local[i*ndof+dof];
+      }
+    }
+
+    Ae_.fill(0.0);
+    //be_.fill(0.0);
+
+    // sum integrands over all gauss points
+    taly_fe_.refill(taly_elem_, TALYFEMLIB::BASIS_LINEAR, 0);
+    while (taly_fe_.next_itg_pt()) {
+      //taly_eq_.Integrands(taly_fe_, Ae_, be_);
+      taly_eq_.Integrands_Ae(taly_fe_, Ae_);
+    }
+
+    // copy Ae/be to dendro structures
+    for (int k = 0; k < 8; k++) {
+      for (int j=0; j<8; j++) {
+	mat[8*k+j] = Ae_(k, j);
+      }
+    }
+    
+    return true;
+  }
+
   inline bool initStencils() {}
 
   inline bool ElementalMatVec(int i, int j, int k, PetscScalar ***in, PetscScalar ***out, double scale) {
@@ -61,29 +102,21 @@ class TalyMatrix : public feMatrix< TalyMatrix<Equation, NodeData> >
     // update node coordinates and values
     for (unsigned int i = 0; i < 8; i++) {
       taly_grid_.node_array_[i]->setCoor(coords[i*3], coords[i*3+1], coords[i*3+2]);
-      //std::cout << "Node [" << i << "] coords: " << coords[i*3] << ", " << coords[i*3+1] << ", " << coords[i*3+2] << "\n";
 
       for (unsigned int dof = 0; dof < ndof; dof++) {
         taly_gf_.GetNodeData(i).value(dof) = in_local[i*ndof+dof];
       }
     }
-    //std::cout << "\n";
 
     Ae_.fill(0.0);
-    be_.fill(0.0);
+    //be_.fill(0.0);
 
     // sum integrands over all gauss points
     taly_fe_.refill(taly_elem_, TALYFEMLIB::BASIS_LINEAR, 0);
     while (taly_fe_.next_itg_pt()) {
-      taly_eq_.Integrands(taly_fe_, Ae_, be_);
+      //taly_eq_.Integrands(taly_fe_, Ae_, be_);
+      taly_eq_.Integrands_Ae(taly_fe_, Ae_);
     }
-
-    /*for (unsigned int y = 0; y < 8; y++) {
-      for (unsigned int x = 0; x < 8; x++) {
-        std::cout << "Ae(" << x << ", " << y << ") = " << Ae_(x, y) << "  ";
-      }
-      std::cout << "\n";
-    }*/
 
     // copy Ae/be to dendro structures
     for (int k = 0; k < 8; k++) {
@@ -91,10 +124,6 @@ class TalyMatrix : public feMatrix< TalyMatrix<Equation, NodeData> >
         out_local[ndof * k] += Ae_(k, j) * in_local[ndof * j];  // TODO * scale?
       }
     }
-    /*for (int i = 0; i < 8; i++) {
-      std::cout << "in_local[" << i << "] = " << in_local[i] << "   (coords: " << coords[i*3] << ", " << coords[i*3+1] << ", " << coords[i*3+2] << ")\n";
-    }
-    std::cout << "\n";*/
 
     // TODO be is ignored
     return true;

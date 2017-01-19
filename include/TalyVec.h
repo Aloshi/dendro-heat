@@ -67,13 +67,14 @@ class TalyVector : public feVector< TalyVector<Equation, NodeData> >
       }
    }
 
-    Ae_.fill(0.0);
+    //Ae_.fill(0.0);
     be_.fill(0.0);
 
     // sum integrands over all gauss points
     taly_fe_.refill(taly_elem_, TALYFEMLIB::BASIS_LINEAR, 0);
     while (taly_fe_.next_itg_pt()) {
-      taly_eq_.Integrands(taly_fe_, Ae_, be_);
+      //taly_eq_.Integrands(taly_fe_, Ae_, be_);
+      taly_eq_.Integrands_be(taly_fe_, be_);
     }
 
     // copy be to dendro structures

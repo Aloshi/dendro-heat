@@ -40,7 +40,7 @@ class parabolic : public timeStepper //<parabolic>
 	*  @param In  PETSC Vec, input vector
 	*  @param Out PETSC Vec, Output vector
 	**/
-  virtual void jacobianMatMult(Vec In, Vec Out);
+  virtual void jacobianMatMult(Mat M, Vec In, Vec Out);
   virtual void jacobianGetDiagonal(Vec diag) {};
 
   virtual void mgjacobianMatMult(DM da, Vec In, Vec Out);
@@ -107,13 +107,26 @@ int parabolic::init()
 
   ierr = VecGetLocalSize(m_vecInitialSolution,&matsize); CHKERRQ(ierr);
 
-  ierr = MatCreateShell(PETSC_COMM_WORLD,matsize,matsize,PETSC_DETERMINE,PETSC_DETERMINE,this,&m_matJacobian); CHKERRQ(ierr);
-  ierr = MatShellSetOperation(m_matJacobian,MATOP_MULT,(void(*)(void))(MatMult)); CHKERRQ(ierr);
+  //ierr = MatCreateShell(PETSC_COMM_WORLD,matsize,matsize,PETSC_DETERMINE,PETSC_DETERMINE,this,&m_matJacobian); CHKERRQ(ierr);
+  //ierr = MatShellSetOperation(m_matJacobian,MATOP_MULT,(void(*)(void))(MatMult)); CHKERRQ(ierr);
+
+  // FOR NON-MATRIX-FREE
+
+  // for petsc:
+  //ierr = DMCreateMatrix(m_da, &m_matJacobian); CHKERRQ(ierr);
+
+  // for octree:
+  m_octDA->createMatrix(m_matJacobian, MATAIJ, 1);  // does this work lol
+
+  /*ierr = MatCreate(PETSC_COMM_WORLD, &m_matJacobian); CHKERRQ(ierr);
+  ierr = MatSetSizes(m_matJacobian, matsize, matsize, PETSC_DETERMINE, PETSC_DETERMINE); CHKERRQ(ierr);
+  ierr = MatSetFromOptions(m_matJacobian); CHKERRQ(ierr);
+  ierr = MatSetUp(m_matJacobian); CHKERRQ(ierr);*/
 
   // Create a KSP context to solve  @ every timestep
   ierr = KSPCreate(PETSC_COMM_WORLD,&m_ksp); CHKERRQ(ierr);
   ierr = KSPSetOperators(m_ksp,m_matJacobian,m_matJacobian); CHKERRQ(ierr);
-  ierr = KSPSetType(m_ksp,KSPCG); CHKERRQ(ierr);
+  //ierr = KSPSetType(m_ksp,KSPCG); CHKERRQ(ierr);
   ierr = KSPSetFromOptions(m_ksp); CHKERRQ(ierr);
 
 
@@ -159,6 +172,12 @@ int parabolic::solve()
       std::cout << "norm of the solution @ " << m_ti->current  << " = " << norm << std::endl;
 //#endif
 
+      // FOR NON-MATRIX-FREE
+      MatZeroEntries(m_matJacobian);
+      m_TalyMat->GetAssembledMatrix_new(&m_matJacobian, 0, m_vecSolution);
+      //VecZeroEntries(m_vecRHS);
+      //m_TalyVec->addVec_new(m_vecSolution, m_vecRHS, 1.0);
+
       // Solve the ksp using the current rhs and non-zero initial guess
       ierr = KSPSetInitialGuessNonzero(m_ksp,PETSC_TRUE); CHKERRQ(ierr);
       ierr = KSPSolve(m_ksp,m_vecRHS,m_vecSolution); CHKERRQ(ierr);
@@ -199,12 +218,13 @@ int parabolic::solve()
  * @param In, PETSC Vec which is the current solution
  * @param Out, PETSC Vec which is Out = J*in, J is the Jacobian (here J = Mass + dt*Stiffness)
  **/
-void parabolic::jacobianMatMult(Vec In, Vec Out)
+void parabolic::jacobianMatMult(Mat M, Vec In, Vec Out)
 {
   VecZeroEntries(Out); /* Clear to zeros*/
 
   if (m_TalyMat) {
-    m_TalyMat->MatVec_new(In, Out);
+    //m_TalyMat->MatVec_new(In, Out);
+    m_TalyMat->GetAssembledMatrix_new(&M, 0, In);
   } else {
     m_Mass->MatVec(In, Out);
     m_Stiffness->MatVec(In, Out, -m_ti->step); /* -dt factor for stiffness*/

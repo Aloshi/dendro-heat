@@ -63,6 +63,7 @@ class feMat {
   virtual bool MatGetDiagonal(Vec _diag, double scale=1.0) = 0;
 
   virtual bool GetAssembledMatrix(Mat *J, MatType mtype) = 0;
+  virtual bool GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) = 0;
 
 
   void setProblemDimensions(double x, double y, double z) {

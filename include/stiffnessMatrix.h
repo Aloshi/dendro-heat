@@ -52,6 +52,9 @@ class stiffnessMatrix : public feMatrix<stiffnessMatrix>
 
     inline bool GetElementalMatrix(int i, int j, int k, PetscScalar *mat);
     inline bool GetElementalMatrix(unsigned int idx, std::vector<ot::MatRecord>& records);
+    inline bool GetElementalMatrix(PetscScalar* in_local, PetscScalar* coords, PetscScalar *mat) {
+	assert(false);
+    }
 
     inline bool ElementalMatGetDiagonal(int i, int j, int k, PetscScalar ***diag, double scale);
     inline bool ElementalMatGetDiagonal(unsigned int idx, PetscScalar *diag, double scale);

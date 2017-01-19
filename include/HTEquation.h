@@ -43,7 +43,7 @@ class HTEquation : public TALYFEMLIB::CEquation<HTNodeData> {
    * @param Ae the element matrix to put data in
    * @param be the element vector to put data in
    */
-  virtual void Integrands(const TALYFEMLIB::FEMElm& fe, TALYFEMLIB::ZeroMatrix<double>& Ae,
+  void Integrands(const TALYFEMLIB::FEMElm& fe, TALYFEMLIB::ZeroMatrix<double>& Ae,
                           TALYFEMLIB::ZEROARRAY<double>& be) {
     const int n_dimensions = fe.nsd();  // # of dimensions: 1D, 2D, or 3D
     const int n_basis_functions = fe.nbf();  // # of basis functions
@@ -70,6 +70,40 @@ class HTEquation : public TALYFEMLIB::CEquation<HTNodeData> {
       }
 
       // Add term to the b element vector
+      be(a) += fe.N(a) / dt_ * u_pre_curr * detJxW;
+    }
+  }
+
+  void Integrands_Ae(const TALYFEMLIB::FEMElm& fe, TALYFEMLIB::ZeroMatrix<double>& Ae) {
+    const int n_dimensions = fe.nsd();  // # of dimensions: 1D, 2D, or 3D
+    const int n_basis_functions = fe.nbf();  // # of basis functions
+    const double detJxW = fe.detJxW();  // (determinant of J) cross W
+    double k_val = K_;  // thermal diffusivity in heat equation
+
+    // in order to assemble the gauss point, we loop over each pair of basis
+    // functions and calculate the individual contributions to the 'Ae' matrix
+    // and 'be' vector.
+    for (int a = 0; a < n_basis_functions; a++) {
+      for (int b = 0; b < n_basis_functions; b++) {
+        double M = fe.N(a) * fe.N(b) * detJxW;
+        double N = 0;
+        for (int k = 0; k < n_dimensions; k++) {
+          N += k_val * fe.dN(a, k) * fe.dN(b, k) * detJxW;
+        }
+        // Add term to the A element matrix
+        Ae(a, b) += M / dt_ + N;
+      }
+    }
+  }
+
+
+  void Integrands_be(const TALYFEMLIB::FEMElm& fe, TALYFEMLIB::ZEROARRAY<double>& be) {
+    const int n_basis_functions = fe.nbf();  // # of basis functions
+    const double detJxW = fe.detJxW();  // (determinant of J) cross W
+
+    const double u_pre_curr = p_data_->valueFEM(fe, U);
+
+    for (int a = 0; a < n_basis_functions; a++) {
       be(a) += fe.N(a) / dt_ * u_pre_curr * detJxW;
     }
   }
