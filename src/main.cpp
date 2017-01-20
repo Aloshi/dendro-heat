@@ -234,7 +234,7 @@ int main(int argc, char **argv)
   }
 
   if (octDA) {
-    //octree2VTK(octDA, initialTemperature, "ic");
+    octree2VTK(octDA, initialTemperature, "ic");
   }
 
   unsigned int numSteps = (unsigned int)(ceil(( ti.stop - ti.start)/ti.step));
@@ -294,13 +294,13 @@ int main(int argc, char **argv)
 
   ts->setTimeInfo(&ti);
   ts->setAdjoint(false); // set if adjoint or forward
-  //ts->useMatrixFree(mfree);
+  ts->setMatrixFree(mfree);
 
   if (!rank)
     std::cout <<"Initializing parabolic"<< std::endl;
 
   double itime = MPI_Wtime();
-	ts->init(); // initialize IMPORTANT 
+  ts->init(); // initialize IMPORTANT 
   if (!rank)
     std::cout <<"Starting parabolic Solve"<< std::endl;
   double stime = MPI_Wtime();
@@ -365,10 +365,10 @@ int setScalarByFunction(DM da, int Ns, Vec vec, std::function<double(double,doub
 }
 
 void setScalarByFunction(ot::DA* da, Vec vec, std::function<double(double,double,double)> f) {
-	int dof=1;	
-  PetscScalar *_vec=NULL; 
+  int dof = 1;
 
-  da->vecGetBuffer(vec,   _vec, false, false, false,  dof);
+  PetscScalar *_vec = NULL; 
+  da->vecGetBuffer(vec, _vec, false, false, false, dof);
   
   // da->ReadFromGhostsBegin<PetscScalar>(_vec, dof);
 	// da->ReadFromGhostsEnd<PetscScalar>(_vec);

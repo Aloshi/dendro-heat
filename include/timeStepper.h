@@ -64,7 +64,7 @@ class timeStepper {
 	*  See feMatrix.h for similar implementation
 	**/
 
-  virtual void  jacobianMatMult(Mat M, Vec _in, Vec _out)= 0;
+  virtual void  jacobianMatMult(Vec _in, Vec _out)= 0;
   virtual void jacobianGetDiagonal(Vec diag) = 0;
 
   virtual void  mgjacobianMatMult(DM _da, Vec _in, Vec _out)= 0;
@@ -91,7 +91,7 @@ class timeStepper {
 	 timeStepper *contxt;
 	 MatShellGetContext(M,(void**)&contxt);
 
-	 contxt->jacobianMatMult(M,In,Out);
+	 contxt->jacobianMatMult(In,Out);
   }
 
   static void MatGetDiagonal(Mat M, Vec diag){
