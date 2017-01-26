@@ -621,7 +621,8 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
           for (int p=k,idx=0; p<k+2; ++p) {
             for (int q=j; q<j+2; ++q) {
               for (int r=m_uiDof*i; r<m_uiDof*(i+2); ++r,++idx) {
-                local_in[idx] = in[r][q][p];
+                //local_in[idx] = in[r][q][p];
+                local_in[idx] = in[p][q][r];
                 local_out[idx] = 0.0;
               }
             }
@@ -666,7 +667,8 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
           for (int p=k,idx=0; p<k+2; ++p) {
             for (int q=j; q<j+2; ++q) {
               for (int r=m_uiDof*i; r<m_uiDof*(i+2); ++r,++idx) {
-                out[r][q][p] += local_out[idx];
+                //out[r][q][p] += local_out[idx];
+                out[p][q][r] += local_out[idx];
                 //std::cout << "out[" << r << "][" << q << "][" << p << "] += " << local_out[idx] << "\n";
                 //std::cout << "in[p][q][r] = " << local_out[idx] << "\n";
               }

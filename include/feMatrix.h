@@ -1092,8 +1092,8 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
           				for (int p=k,idx_local=0; p<k+2; ++p) {
             					for (int q=j; q<j+2; ++q) {
               						for (int r=m_uiDof*i; r<m_uiDof*(i+2); ++r,++idx_local) {
-                						local_in[idx_local] = in[r][q][p];
-                
+                						//local_in[idx_local] = in[r][q][p];
+                						local_in[idx_local] = in[p][q][r];
               						}
             					}
           				}
