@@ -2,6 +2,8 @@
 
 #include "mpi.h"
 #include <assert.h>
+#include <sstream>
+#include <iostream>
 #include "TecplotIO_ascii.h"
 
 // get node in an element
@@ -24,6 +26,12 @@ int get_node_id(int i, int j, int k, int nx, int ny, int nz, int node_idx) {
 // 3D only
 int write_vector(const char* file_prefix, Vec vec, DM da)
 {
+  int mpi_size;
+  MPI_Comm_size(PETSC_COMM_WORLD, &mpi_size);
+  if (mpi_size != 1) {
+    std::cerr << "Cannot save vector (" << file_prefix << ".plt) on more than one process yet\n";
+    return 0;
+  }
   
   int x, y, z, m, n, p;
   int mx,my,mz, xne, yne, zne;
@@ -67,13 +75,10 @@ int write_vector(const char* file_prefix, Vec vec, DM da)
   PetscScalar ***array;
   CHKERRQ(DMDAVecGetArray(da, vec, &array));
 
-  int size;
-  MPI_Comm_size(PETSC_COMM_WORLD, &size);
-  assert(size == 1);
-
   TecplotWriterASCII w;
-  std::string path = std::string(file_prefix) + ".plt";
-  w.open(path.c_str(), false);
+  std::stringstream ss;
+  ss << file_prefix << ".plt";
+  w.open(ss.str().c_str(), false);
 
   TecplotHeader header;
   header.title = file_prefix;
