@@ -197,7 +197,7 @@ int main(int argc, char **argv)
 
     // create vectors 
     octDA->createVector(rho, true, false, 1);
-    octDA->createVector(initialTemperature, false, true, 1);
+    octDA->createVector(initialTemperature, false, false, 1);
   }
 
   std::cout << "Created DA and vectors" << std::endl;
@@ -370,8 +370,8 @@ void setScalarByFunction(ot::DA* da, Vec vec, std::function<double(double,double
   PetscScalar *_vec = NULL; 
   da->vecGetBuffer(vec, _vec, false, false, false, dof);
   
-  // da->ReadFromGhostsBegin<PetscScalar>(_vec, dof);
-	// da->ReadFromGhostsEnd<PetscScalar>(_vec);
+  //da->ReadFromGhostsBegin<PetscScalar>(_vec, dof);
+  //da->ReadFromGhostsEnd<PetscScalar>(_vec);
 		
   unsigned int maxD = da->getMaxDepth();
 	unsigned int lev;
