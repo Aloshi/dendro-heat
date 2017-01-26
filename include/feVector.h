@@ -743,7 +743,7 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
       build_taly_coordinates(coords, pt, h);
 
       // interpolate (local_in -> node_data_temp) TODO check order of arguments
-      interp_global_to_local(in, node_data_temp, m_octDA);  // TODO doesn't take into account ndof
+      interp_global_to_local(in, node_data_temp, m_octDA, m_uiDof);
 
       // map from dendro order to taly order (node_data_temp -> local_in);
       // TODO move to TalyMatrix
@@ -770,7 +770,7 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
           local_out[i*m_uiDof + dof] = 0.0;
         }
       }*/
-      interp_local_to_global(node_data_temp, out, m_octDA);  // TODO doesn't take into account ndof
+      interp_local_to_global(node_data_temp, out, m_octDA, m_uiDof);
 		}//end INDEPENDENT
 
 		// Wait for communication to end.
@@ -794,7 +794,7 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
       build_taly_coordinates(coords, pt, h);
 
       // interpolate (local_in -> node_data_temp) TODO check order of arguments
-      interp_global_to_local(in, node_data_temp, m_octDA);  // TODO doesn't take into account ndof
+      interp_global_to_local(in, node_data_temp, m_octDA, m_uiDof);
 
       // map from dendro order to taly order (node_data_temp -> local_in);
       // TODO move to TalyMatrix
@@ -814,7 +814,7 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
       taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
 
       // interpolate hanging nodes (node_data_temp -> local_out)
-      interp_local_to_global(node_data_temp, out, m_octDA);  // TODO doesn't take into account ndof
+      interp_local_to_global(node_data_temp, out, m_octDA, m_uiDof);
 		}//end DEPENDENT
 
     delete[] local_in;

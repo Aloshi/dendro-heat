@@ -10,13 +10,11 @@
 #define NODE_7 128u
 
 
-void interp_global_to_local(PetscScalar* glo, PetscScalar* /*__restrict*/ loc, ot::DA* da) {
+void interp_global_to_local(PetscScalar* glo, PetscScalar* /*__restrict*/ loc, ot::DA* da, int m_uiDof) {
 	unsigned int idx[8];
 	unsigned char hangingMask = da->getHangingNodeIndex(da->curr());
 	unsigned int chNum = da->getChildNumber();
 	da->getNodeIndices(idx);
-
-  unsigned int m_uiDof = 1;
   
   //std::cout << "chNum: " << chNum << std::endl;
 
@@ -338,13 +336,11 @@ void interp_global_to_local(PetscScalar* glo, PetscScalar* /*__restrict*/ loc, o
 
 }
 
-void interp_local_to_global(PetscScalar* /*__restrict*/ loc, PetscScalar* glo, ot::DA* da) {
+void interp_local_to_global(PetscScalar* /*__restrict*/ loc, PetscScalar* glo, ot::DA* da, int m_uiDof) {
   unsigned int idx[8];
 	unsigned char hangingMask = da->getHangingNodeIndex(da->curr());
 	unsigned int chNum = da->getChildNumber();
 	da->getNodeIndices(idx);
-
-  unsigned int m_uiDof = 1;
 
   switch (chNum) {
     case 0:
@@ -769,14 +765,12 @@ void interp_local_to_global(PetscScalar* /*__restrict*/ loc, PetscScalar* glo, o
 
 
 
-void interp_local_to_global_still_local(PetscScalar* /*__restrict*/ loc, PetscScalar* loc_new, ot::DA* da) {
+void interp_local_to_global_still_local(PetscScalar* /*__restrict*/ loc, PetscScalar* loc_new, ot::DA* da, int m_uiDof) {
   //unsigned int idx[8];
 	unsigned char hangingMask = da->getHangingNodeIndex(da->curr());
 	unsigned int chNum = da->getChildNumber();
   //unsigned int idx[8];
 	//da->getNodeIndices(idx);
-
-  unsigned int m_uiDof = 1;
 
   switch (chNum) {
     case 0:
@@ -1200,8 +1194,7 @@ void interp_local_to_global_still_local(PetscScalar* /*__restrict*/ loc, PetscSc
 } // loc_to_glo
 
 
-void interp_local_to_global_matrix(PetscScalar* Ke, std::vector<ot::MatRecord>& out, ot::DA* da) {
-  unsigned int m_uiDof = 1;
+void interp_local_to_global_matrix(PetscScalar* Ke, std::vector<ot::MatRecord>& out, ot::DA* da, int m_uiDof) {
   unsigned int m = m_uiDof * 8;  // matrix size in one dimension
 
   unsigned int idx[8];
@@ -1222,7 +1215,7 @@ void interp_local_to_global_matrix(PetscScalar* Ke, std::vector<ot::MatRecord>& 
       interp[j] = 0.0;
     }
 
-    interp_local_to_global_still_local(Ke_cols + m*i, interp, da);
+    interp_local_to_global_still_local(Ke_cols + m*i, interp, da, m_uiDof);
 
     // convert interp to m ot::MatRecords
     for (unsigned int j = 0; j < m; j++) {  // row

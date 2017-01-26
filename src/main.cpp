@@ -26,8 +26,8 @@ static char help[] = "Driver for heat";
 
 
 // defined below
-void setScalarByFunction(ot::DA* da, Vec vec, std::function<double(double,double,double)> f);
-int setScalarByFunction(DM da, int Ns, Vec vec, std::function<double(double,double,double)> f);
+void setScalarByFunction(ot::DA* da, Vec vec, int dof, std::function<double(double,double,double,int)> f);
+int setScalarByFunction(DM da, int Ns, Vec vec, int dof, std::function<double(double,double,double,int)> f);
 
 static double gSize[3] = {1, 1, 1};
 
@@ -140,7 +140,7 @@ int main(int argc, char **argv)
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   int Ns = 16;
-  unsigned int dof = 1;
+  int dof = 1;
 
   char problemName[PETSC_MAX_PATH_LEN];
   char filename[PETSC_MAX_PATH_LEN];
@@ -196,8 +196,8 @@ int main(int argc, char **argv)
     octDA = new ot::DA(oct, PETSC_COMM_WORLD, PETSC_COMM_WORLD, 0.3);
 
     // create vectors 
-    octDA->createVector(rho, true, false, 1);
-    octDA->createVector(initialTemperature, false, false, 1);
+    octDA->createVector(rho, true, false, 1 /*dof*/);
+    octDA->createVector(initialTemperature, false, false, 1 /*dof*/);
   }
 
   std::cout << "Created DA and vectors" << std::endl;
@@ -217,24 +217,24 @@ int main(int argc, char **argv)
   CHKERRQ( VecSet ( rho, 1.0 ) );
 
   if (petscDA) {
-    setScalarByFunction(petscDA, Ns, initialTemperature, [](double x, double y, double z) {
+    setScalarByFunction(petscDA, Ns, initialTemperature, dof, [](double x, double y, double z, int dof) {
       return sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
     });
   }
 
   if (octDA) {
-    setScalarByFunction(octDA, initialTemperature, [](double x, double y, double z) {
+    setScalarByFunction(octDA, initialTemperature, dof, [](double x, double y, double z, int dof) {
       return sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
     });
   }
 
   // print IC
   if (petscDA) {
-    write_vector("ic", initialTemperature, petscDA);
+    write_vector("ic", initialTemperature, dof, petscDA);
   }
 
   if (octDA) {
-    octree2VTK(octDA, initialTemperature, "ic");
+    octree2VTK(octDA, initialTemperature, dof, "ic");
   }
 
   unsigned int numSteps = (unsigned int)(ceil(( ti.stop - ti.start)/ti.step));
@@ -281,6 +281,7 @@ int main(int argc, char **argv)
 
   ts->setTalyMatrix(talyMat);
   ts->setTalyVector(talyVec);
+  ts->setDof(dof);
 
   ts->setTimeFrames(1);
 
@@ -317,7 +318,7 @@ int main(int argc, char **argv)
 }
 
 // set IC for PETSc DA
-int setScalarByFunction(DM da, int Ns, Vec vec, std::function<double(double,double,double)> f) {
+int setScalarByFunction(DM da, int Ns, Vec vec, int dof, std::function<double(double,double,double,int)> f) {
   int x, y, z, m, n, p;
   int mx,my,mz, xne, yne, zne;
 
@@ -355,8 +356,10 @@ int setScalarByFunction(DM da, int Ns, Vec vec, std::function<double(double,doub
     for (int j=y; j < y+n; j++) {
       for (int i=x; i < x+m; i++) {
         double coords[3] = { hx*i, hx*j, hx*k };
-        double val = f(coords[0], coords[1], coords[2]);
-        vec_data[k][j][i] = val;
+        for (int d = 0; d < dof; d++) {
+          double val = f(coords[0], coords[1], coords[2], d);
+          vec_data[k][j][i*dof + d] = val;
+        }
       } // end i
     } // end j
   } // end k
@@ -364,8 +367,7 @@ int setScalarByFunction(DM da, int Ns, Vec vec, std::function<double(double,doub
   CHKERRQ( DMDAVecRestoreArray ( da, vec, &vec_data ) );
 }
 
-void setScalarByFunction(ot::DA* da, Vec vec, std::function<double(double,double,double)> f) {
-  int dof = 1;
+void setScalarByFunction(ot::DA* da, Vec vec, int dof, std::function<double(double,double,double,int)> f) {
 
   PetscScalar *_vec = NULL; 
   da->vecGetBuffer(vec, _vec, false, false, false, dof);
@@ -374,15 +376,15 @@ void setScalarByFunction(ot::DA* da, Vec vec, std::function<double(double,double
   //da->ReadFromGhostsEnd<PetscScalar>(_vec);
 		
   unsigned int maxD = da->getMaxDepth();
-	unsigned int lev;
-	double hx, hy, hz;
-	Point pt, parPt;
+  unsigned int lev;
+  double hx, hy, hz;
+  Point pt, parPt;
 
-	double xFac = gSize[0]/((double)(1<<(maxD-1)));
-	double yFac = gSize[1]/((double)(1<<(maxD-1)));
-	double zFac = gSize[2]/((double)(1<<(maxD-1)));
-	double xx[8], yy[8], zz[8];
-	unsigned int idx[8];
+  double xFac = gSize[0]/((double)(1<<(maxD-1)));
+  double yFac = gSize[1]/((double)(1<<(maxD-1)));
+  double zFac = gSize[2]/((double)(1<<(maxD-1)));
+  double xx[8], yy[8], zz[8];
+  unsigned int idx[8];
 
   for ( da->init<ot::DA_FLAGS::ALL>(); da->curr() < da->end<ot::DA_FLAGS::ALL>(); da->next<ot::DA_FLAGS::ALL>() ) { 
     // set the value
@@ -398,7 +400,6 @@ void setScalarByFunction(ot::DA* da, Vec vec, std::function<double(double,double
     unsigned char hangingMask = da->getHangingNodeIndex(da->curr());
     
     // if hanging, use parents, else mine. 
-    
     xx[0] = pt.x()*xFac; yy[0] = pt.y()*yFac; zz[0] = pt.z()*zFac;
     xx[1] = pt.x()*xFac+hx; yy[1] = pt.y()*yFac; zz[1] = pt.z()*zFac;
     xx[2] = pt.x()*xFac; yy[2] = pt.y()*yFac+hy; zz[2] = pt.z()*zFac;
@@ -412,12 +413,13 @@ void setScalarByFunction(ot::DA* da, Vec vec, std::function<double(double,double
     da->getNodeIndices(idx);
     for (int i=0; i<8; ++i) {
       if ( ! ( hangingMask & ( 1u << i ) ) ) {
-        _vec[idx[i]] =  f(xx[i], yy[i], zz[i]); //! use correct coordinate
+        for (int d = 0; d < dof; d++) {
+          _vec[idx[i]*dof+d] =  f(xx[i], yy[i], zz[i], d); //! use correct coordinate
+        }
       }
     }
     //  std::cout << "Setting value: " << idx[0] << " to " << f(xx,yy,zz) << std::endl;
   }
 
   da->vecRestoreBuffer(vec,  _vec, false, false, false,  dof);
-  
 }

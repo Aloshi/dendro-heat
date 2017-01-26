@@ -118,7 +118,7 @@ int parabolic::init()
     if (m_da) {  // petsc
       ierr = DMCreateMatrix(m_da, &m_matJacobian); CHKERRQ(ierr);
     } else if (m_octDA) {  // octree
-      m_octDA->createMatrix(m_matJacobian, MATAIJ, 1);
+      m_octDA->createMatrix(m_matJacobian, MATAIJ, getDof());
     } else {
       assert(false);
     }
@@ -294,10 +294,10 @@ int parabolic::monitor()
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     if (m_da) {
-      write_vector(ss.str().c_str(), m_vecSolution, m_da);
+      write_vector(ss.str().c_str(), m_vecSolution, getDof(), m_da);
     } else {
       std::string asdf = ss.str();
-      octree2VTK(m_octDA, m_vecSolution, asdf);
+      octree2VTK(m_octDA, m_vecSolution, getDof(), asdf);
     }
 
     /*PetscViewer view;

@@ -24,7 +24,7 @@ int get_node_id(int i, int j, int k, int nx, int ny, int nz, int node_idx) {
 }
 
 // 3D only
-int write_vector(const char* file_prefix, Vec vec, DM da)
+int write_vector(const char* file_prefix, Vec vec, int ndof, DM da)
 {
   int mpi_size;
   MPI_Comm_size(PETSC_COMM_WORLD, &mpi_size);
@@ -62,12 +62,8 @@ int write_vector(const char* file_prefix, Vec vec, DM da)
   unsigned int n_elements = Ns*Ns*Ns;
   unsigned int n_nodes = (Ns+1)*(Ns+1)*(Ns+1);
   unsigned int nsd = 3;
-  unsigned int ndof = 1;
   unsigned int nodes_per_elem = 8;
   ElemType elem_type = kElem3dHexahedral;
-
-  std::vector<double> node_data;
-  node_data.resize(n_nodes * (nsd + ndof));
 
   std::vector<PhysicalNodeID> connectivity;
   connectivity.resize(n_elements * nodes_per_elem);
@@ -82,7 +78,11 @@ int write_vector(const char* file_prefix, Vec vec, DM da)
 
   TecplotHeader header;
   header.title = file_prefix;
-  header.variables = { "x", "y", "z", "u" };
+  header.variables = { "x", "y", "z" };
+  for (int i = 0; i < ndof; i++) {
+    header.variables.push_back(std::string("u") + std::to_string(i));
+  }
+
   w.write_header(header);
 
   TecplotZone zone;
@@ -92,12 +92,19 @@ int write_vector(const char* file_prefix, Vec vec, DM da)
   zone.elem_type = elem_type;
   w.write_zone(zone);
 
+  std::vector<double> node_data(header.variables.size());
   unsigned int last_node_id = 0;
   for (int k=z; k < z+p; k++) {
     for (int j=y; j < y+n; j++) {
       for (int i=x; i < x+m; i++) {
-        double data[4] = { h*i, h*j, h*k, array[k][j][i] };
-        w.write_node(data);
+        node_data[0] = h*i;
+        node_data[1] = h*j;
+        node_data[2] = h*k;
+        for (int d = 0; d < ndof; d++) {
+          node_data[nsd+d] = array[k][j][i*ndof+d];
+        }
+        //double data[4] = { h*i, h*j, h*k, array[k][j][i] };
+        w.write_node(node_data.data());
         assert(get_node_id(i, j, k, Ns+1, Ns+1, Ns+1, 0) == last_node_id++);
       } // end i
     } // end j

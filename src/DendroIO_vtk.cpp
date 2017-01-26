@@ -3,7 +3,7 @@
 
 double gSize[3] = {1, 1, 1};
 
-void octree2VTK(ot::DA* da, Vec vec, std::string file_prefix) {
+void octree2VTK(ot::DA* da, Vec vec, int dof, std::string file_prefix) {
   int rank, size;
   char fname[256];
 
@@ -41,7 +41,6 @@ void octree2VTK(ot::DA* da, Vec vec, std::string file_prefix) {
     int num_data_field = 2; // rank and data 
     int num_cells_elements = num_cells * unit_points + num_cells;
 
-    int dof=1;	
     PetscScalar *_vec=NULL; 
 
     da->vecGetBuffer(vec,   _vec, false, false, true,  dof);
@@ -103,35 +102,29 @@ void octree2VTK(ot::DA* da, Vec vec, std::string file_prefix) {
     
     out << std::endl;
     out << "POINT_DATA " << num_vertices  << std::endl;
-    out << "SCALARS foo float 1" << std::endl;
-    out << "LOOKUP_TABLE default" << std::endl;
 
-    PetscScalar* local = new PetscScalar[8];
-    
-    for ( da->init<ot::DA_FLAGS::WRITABLE>(); da->curr() < da->end<ot::DA_FLAGS::WRITABLE>(); da->next<ot::DA_FLAGS::WRITABLE>() ) { 
-      da->getNodeIndices(idx);
-      interp_global_to_local(_vec, local, da);
+    // this is inefficient - we will interpolate all data dof times
+    PetscScalar* local = new PetscScalar[8*dof];
+    for (int d = 0; d < dof; d++) {
+      // name fields data0, data1, etc.
+      out << "SCALARS data" << d << " float 1" << std::endl;
+      out << "LOOKUP_TABLE default" << std::endl;
       
-       
-        out << local[0] << " ";
-        out << local[1] << " ";
-        out << local[3] << " ";
-        out << local[2] << " ";
-        out << local[4] << " ";
-        out << local[5] << " ";
-        out << local[7] << " ";
-        out << local[6] << " "; 
-        /*
-        out << _vec[idx[0]] << " ";
-        out << _vec[idx[1]] << " ";
-        out << _vec[idx[3]] << " ";
-        out << _vec[idx[2]] << " ";
-        out << _vec[idx[4]] << " ";
-        out << _vec[idx[5]] << " ";
-        out << _vec[idx[7]] << " ";
-        out << _vec[idx[6]] << " "; */
-    
+      for ( da->init<ot::DA_FLAGS::WRITABLE>(); da->curr() < da->end<ot::DA_FLAGS::WRITABLE>(); da->next<ot::DA_FLAGS::WRITABLE>() ) { 
+        da->getNodeIndices(idx);
+        interp_global_to_local(_vec, local, da, dof);
+
+          out << local[0*dof+d] << " ";
+          out << local[1*dof+d] << " ";
+          out << local[3*dof+d] << " ";
+          out << local[2*dof+d] << " ";
+          out << local[4*dof+d] << " ";
+          out << local[5*dof+d] << " ";
+          out << local[7*dof+d] << " ";
+          out << local[6*dof+d] << " ";
+      }
     }
+    delete[] local;
 
     out << std::endl;
 

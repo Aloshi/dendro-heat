@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 2.8)
 project(dendro)
 
-set (PETSC_DIR /home/songzhex/PACKAGES/petsc-3.5.4)
+set (PETSC_DIR /home/lofquist/LIBS/petsc-3.5.4)
 set (PETSC_ARCH arch-linux2-cxx-debug)
-set (DENDRO_DIR /home/songzhex/Downloads/Dendro4)
-set (TALYFEM_DIR /home/songzhex/PACKAGES/taly_fem_7.1)
-set (LIBCONFIG_DIR /home/songzhex/PACKAGES/libconfig-1.5/install)
+set (DENDRO_DIR /home/lofquist/LIBS/Dendro4)
+set (TALYFEM_DIR /home/lofquist/talyfemlib)
+set (LIBCONFIG_DIR /home/lofquist/LIBS/libconfig-1.5/install)
 
 # version number
 set (Dendro_VERSION_MAJOR 4)

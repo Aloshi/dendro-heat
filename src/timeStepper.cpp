@@ -27,6 +27,7 @@ timeStepper::timeStepper()
   // Adjoint flag false
   m_bIsAdjoint = false;
 
+  m_uiDof = 0;
 }
 timeStepper::~timeStepper()
 {

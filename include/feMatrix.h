@@ -706,50 +706,49 @@ bool feMatrix<T>::MatVec_new(Vec _in, Vec _out, double scale){
     delete[] local_out;
     delete[] coords;
 
-		postMatVec();
+    postMatVec();
 
-		ierr = DMDAVecRestoreArray(m_DA, inlocal, &in); CHKERRQ(ierr);  
-		ierr = DMDAVecRestoreArray(m_DA, outlocal, &out); CHKERRQ(ierr);  
+    ierr = DMDAVecRestoreArray(m_DA, inlocal, &in); CHKERRQ(ierr);  
+    ierr = DMDAVecRestoreArray(m_DA, outlocal, &out); CHKERRQ(ierr);  
 
-		ierr = DMLocalToGlobalBegin(m_DA, outlocal, ADD_VALUES, _out); CHKERRQ(ierr);  
-		ierr = DMLocalToGlobalEnd(m_DA, outlocal, ADD_VALUES,_out); CHKERRQ(ierr);  
+    ierr = DMLocalToGlobalBegin(m_DA, outlocal, ADD_VALUES, _out); CHKERRQ(ierr);  
+    ierr = DMLocalToGlobalEnd(m_DA, outlocal, ADD_VALUES,_out); CHKERRQ(ierr);  
 
-		ierr = DMRestoreLocalVector(m_DA, &inlocal); CHKERRQ(ierr);  
-		ierr = DMRestoreLocalVector(m_DA, &outlocal); CHKERRQ(ierr);  
-		// ierr = VecDestroy(outlocal); CHKERRQ(ierr);  
+    ierr = DMRestoreLocalVector(m_DA, &inlocal); CHKERRQ(ierr);  
+    ierr = DMRestoreLocalVector(m_DA, &outlocal); CHKERRQ(ierr);  
+    // ierr = VecDestroy(outlocal); CHKERRQ(ierr);  
 
-	} else {
-		// loop for octree DA.
+  } else {
+    // loop for octree DA.
 
+    PetscScalar *out=NULL;
+    PetscScalar *in=NULL; 
 
-		PetscScalar *out=NULL;
-		PetscScalar *in=NULL; 
+    // get Buffers ...
+    //Nodal,Non-Ghosted,Read,1 dof, Get in array and get ghosts during computation
+    m_octDA->vecGetBuffer(_in,   in, false, false, true,  m_uiDof);
+    m_octDA->vecGetBuffer(_out, out, false, false, false, m_uiDof);
 
-		// get Buffers ...
-		//Nodal,Non-Ghosted,Read,1 dof, Get in array and get ghosts during computation
-		m_octDA->vecGetBuffer(_in,   in, false, false, true,  m_uiDof);
-		m_octDA->vecGetBuffer(_out, out, false, false, false, m_uiDof);
+    // start comm for in ...
+    //m_octDA->updateGhostsBegin<PetscScalar>(in, false, m_uiDof);
+    // m_octDA->ReadFromGhostsBegin<PetscScalar>(in, false, m_uiDof);
+    m_octDA->ReadFromGhostsBegin<PetscScalar>(in, m_uiDof);
+    preMatVec();
 
-		// start comm for in ...
-		//m_octDA->updateGhostsBegin<PetscScalar>(in, false, m_uiDof);
-		// m_octDA->ReadFromGhostsBegin<PetscScalar>(in, false, m_uiDof);
-		m_octDA->ReadFromGhostsBegin<PetscScalar>(in, m_uiDof);
-		preMatVec();
-
-		const unsigned int maxD = m_octDA->getMaxDepth();
-		const double xFac = m_dLx/((double)(1<<(maxD-1)));
-		const double yFac = m_dLy/((double)(1<<(maxD-1)));
-		const double zFac = m_dLz/((double)(1<<(maxD-1)));
+    const unsigned int maxD = m_octDA->getMaxDepth();
+    const double xFac = m_dLx/((double)(1<<(maxD-1)));
+    const double yFac = m_dLy/((double)(1<<(maxD-1)));
+    const double zFac = m_dLz/((double)(1<<(maxD-1)));
 
     PetscScalar* local_in = new PetscScalar[m_uiDof*8];
     PetscScalar* local_out = new PetscScalar[m_uiDof*8];
     PetscScalar* node_data_temp = new PetscScalar[m_uiDof*8];  // scratch
     double coords[8*3];
 
-		// Independent loop, loop through the nodes this processor owns..
-		for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
+    // Independent loop, loop through the nodes this processor owns..
+    for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
 
-			int lev = m_octDA->getLevel(m_octDA->curr());
+      int lev = m_octDA->getLevel(m_octDA->curr());
       Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
       Point pt = m_octDA->getCurrentOffset();
       pt.x() *= xFac;
@@ -767,15 +766,14 @@ bool feMatrix<T>::MatVec_new(Vec _in, Vec _out, double scale){
       build_taly_coordinates(coords, pt, h);
 
       // interpolate (local_in -> node_data_temp) TODO check order of arguments
-      interp_global_to_local(in, node_data_temp, m_octDA);  // TODO doesn't take into account ndof
+      interp_global_to_local(in, node_data_temp, m_octDA, m_uiDof);
 
       // map from dendro order to taly order (node_data_temp -> local_in);
       // TODO move to TalyMatrix
       dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
 
       // initialize local_out?
-      for (int i = 0; i < 8; i++) {
-        // TODO m_uiDof
+      for (int i = 0; i < 8*m_uiDof; i++) {
         local_out[i] = 0.0;
       }
 
@@ -786,25 +784,17 @@ bool feMatrix<T>::MatVec_new(Vec _in, Vec _out, double scale){
       // TODO move to TalyMatrix
       taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
 
-      // interpolate hanging nodes (node_data_temp -> local_out)
-      // need to zero out local_out first, interp is additive
-      // for some reason
-      /*for (int i = 0; i < 8; i++) {
-        for (int dof = 0; dof < m_uiDof; dof++) {
-          local_out[i*m_uiDof + dof] = 0.0;
-        }
-      }*/
-      interp_local_to_global(node_data_temp, out, m_octDA);  // TODO doesn't take into account ndof
-		}//end INDEPENDENT
+      interp_local_to_global(node_data_temp, out, m_octDA, m_uiDof);
+    }//end INDEPENDENT
 
-		// Wait for communication to end.
-		//m_octDA->updateGhostsEnd<PetscScalar>(in);
-		m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
+    // Wait for communication to end.
+    //m_octDA->updateGhostsEnd<PetscScalar>(in);
+    m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
 
-		// Dependent loop ...
-		for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
+    // Dependent loop ...
+    for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
 
-			int lev = m_octDA->getLevel(m_octDA->curr());
+      int lev = m_octDA->getLevel(m_octDA->curr());
       Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
       Point pt = m_octDA->getCurrentOffset();
       pt.x() *= xFac;
@@ -818,15 +808,14 @@ bool feMatrix<T>::MatVec_new(Vec _in, Vec _out, double scale){
       build_taly_coordinates(coords, pt, h);
 
       // interpolate (local_in -> node_data_temp) TODO check order of arguments
-      interp_global_to_local(in, node_data_temp, m_octDA);  // TODO doesn't take into account ndof
+      interp_global_to_local(in, node_data_temp, m_octDA, m_uiDof);
 
       // map from dendro order to taly order (node_data_temp -> local_in);
       // TODO move to TalyMatrix
       dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
 
       // initialize local_out?
-      for (int i = 0; i < 8; i++) {
-        // TODO m_uiDof
+      for (int i = 0; i < 8*m_uiDof; i++) {
         local_out[i] = 0.0;
       }
 
@@ -838,22 +827,22 @@ bool feMatrix<T>::MatVec_new(Vec _in, Vec _out, double scale){
       taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
 
       // interpolate hanging nodes (node_data_temp -> local_out)
-      interp_local_to_global(node_data_temp, out, m_octDA);  // TODO doesn't take into account ndof
-		}//end DEPENDENT
+      interp_local_to_global(node_data_temp, out, m_octDA, m_uiDof);
+    }//end DEPENDENT
 
     delete[] local_in;
     delete[] local_out;
     delete[] node_data_temp;
 
-		postMatVec();
+    postMatVec();
 
-		// Restore Vectors ...
-		m_octDA->vecRestoreBuffer(_in,   in, false, false, true,  m_uiDof);
-		m_octDA->vecRestoreBuffer(_out, out, false, false, false, m_uiDof);
+    // Restore Vectors ...
+    m_octDA->vecRestoreBuffer(_in,   in, false, false, true,  m_uiDof);
+    m_octDA->vecRestoreBuffer(_out, out, false, false, false, m_uiDof);
 
-	}
+  }
 
-	PetscFunctionReturn(0);
+  PetscFunctionReturn(0);
 }
 
 #undef __FUNCT__
@@ -1248,7 +1237,7 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
       			build_taly_coordinates(coords, pt, h);
 
       			// interpolate (local_in -> node_data_temp) TODO check order of arguments
-      			interp_global_to_local(in, node_data_temp, m_octDA);  // TODO doesn't take into account ndof
+      			interp_global_to_local(in, node_data_temp, m_octDA, m_uiDof);
 
       			// map from dendro order to taly order (node_data_temp -> local_in);
       			// TODO move to TalyMatrix
@@ -1283,7 +1272,7 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
           				local_out[i*m_uiDof + dof] = 0.0;
         			}
       			}*/
-      			interp_local_to_global_matrix(Ke, records, m_octDA);  // TODO doesn't take into account ndof
+      			interp_local_to_global_matrix(Ke, records, m_octDA, m_uiDof);
 			// TODO How to interpolate this back ???
 			//********************************************//
 			if(records.size() > 500) {
@@ -1319,7 +1308,7 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
       			build_taly_coordinates(coords, pt, h);
 
       			// interpolate (local_in -> node_data_temp) TODO check order of arguments
-      			interp_global_to_local(in, node_data_temp, m_octDA);  // TODO doesn't take into account ndof
+      			interp_global_to_local(in, node_data_temp, m_octDA, m_uiDof);
 
       			// map from dendro order to taly order (node_data_temp -> local_in);
       			// TODO move to TalyMatrix
@@ -1357,7 +1346,7 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
       			}*/
 			// TODO How to interpolate this back ???
 			//********************************************//
-      			interp_local_to_global_matrix(Ke, records, m_octDA);  // TODO doesn't take into account ndof
+      			interp_local_to_global_matrix(Ke, records, m_octDA, m_uiDof);
 
 			if(records.size() > 500) {
 				m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);

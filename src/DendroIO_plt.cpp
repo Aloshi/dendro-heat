@@ -6,10 +6,9 @@
 #include <fstream>
 #include <sstream>
 
-void octree2PLT(ot::DA* da, Vec vec, std::string file_name)
+void octree2PLT(ot::DA* da, Vec vec, int ndof, std::string file_name)
 {
   unsigned int nsd = 3;
-  unsigned int ndof = 1;
   ElemType elem_type = kElem3dHexahedral;
   unsigned int nodes_per_elem = 8;
   unsigned int n_elements = da->getElementSize();
@@ -24,6 +23,7 @@ void octree2PLT(ot::DA* da, Vec vec, std::string file_name)
   PetscScalar* u = NULL;
   da->vecGetBuffer(vec, u, false, false, true, ndof);
 
+  // TODO - is this necessary?
   da->ReadFromGhostsBegin<PetscScalar>(u, ndof);
   da->ReadFromGhostsEnd<PetscScalar>(u);
 
@@ -32,7 +32,13 @@ void octree2PLT(ot::DA* da, Vec vec, std::string file_name)
 
   TecplotHeader header;
   header.title = file_name;
-  header.variables = { "x", "y", "z", "u" };  // TODO add more based on ndof
+  header.variables = { "x", "y", "z" };
+
+  // add variables based on ndof
+  for (int i = 0; i < ndof; i++) {
+    header.variables.push_back(std::string("u") + std::to_string(i));
+  }
+
   w.write_header(header);
 
   TecplotZone zone;
@@ -67,13 +73,20 @@ void octree2PLT(ot::DA* da, Vec vec, std::string file_name)
 
     unsigned int node_idx[8];
     da->getNodeIndices(node_idx); 
-    interp_global_to_local(u, node_data_loc, da);
+    interp_global_to_local(u, node_data_loc, da, ndof);
 
+    std::vector<double> data(header.variables.size());
     for (int j = 0; j < 8; j++) {
       double p[3] = { coords[j][0] * hx, coords[j][1] * hx, coords[j][2] * hx };
-      double val = node_data_loc[j];
-      double data[4] = { p[0], p[1], p[2], val };
-      w.write_node(data);
+      //double val = node_data_loc[j];
+      for (int d = 0; d < nsd; d++) {
+        data[d] = p[d];
+      }
+      for (int d = 0; d < ndof; d++) {
+        data[nsd + d] = node_data_loc[j*ndof+d];
+      }
+
+      w.write_node(data.data());
     }
   }
 

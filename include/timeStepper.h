@@ -46,6 +46,9 @@ class timeStepper {
 
   int setTimeInfo(timeInfo *ti);
 
+  inline int setDof(int dof) { m_uiDof = dof; }
+  inline int getDof() const { return m_uiDof; }
+
   timeInfo* getTimeInfo() {
     return m_ti;
   }
@@ -237,6 +240,7 @@ class timeStepper {
   double          m_demax;
   double          m_demin;
 
+  int m_uiDof;
 };
 
 //#include "timeStepper.cpp"
