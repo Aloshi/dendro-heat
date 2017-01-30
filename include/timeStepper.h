@@ -13,6 +13,18 @@
 //#include "stsdamgHeader.h"
 //#include "rpHeader.h"
 
+// Boundary conditions stuff
+typedef std::pair<int /*dof*/, PetscScalar /*value*/> Direchlet;
+
+struct Boundary {
+  std::vector<Direchlet> direchlets;
+
+  inline void addDirechlet(int dof, PetscScalar value) {
+    direchlets.push_back(Direchlet(dof, value));
+  }
+  inline bool empty() const { return direchlets.empty(); }
+};
+
 class timeStepper {
   public:
   // typedefs and enums
@@ -36,7 +48,7 @@ class timeStepper {
 
   int setTalyVector(feVec* vec);
 
-
+  void setBoundaryCondition(const std::function<Boundary(double, double, double)>& f);
   
   int setAdjoint(bool flag);
 
@@ -190,7 +202,21 @@ class timeStepper {
 	 {
 		return m_demin;
 	 }
+
+  void updateBoundaries(ot::DA* da);
+  void updateBoundaries(DM da);
+
  protected:
+  inline const double* getProblemSize() {
+    static const double problemSize[3] = { 1.0, 1.0, 1.0};
+    return problemSize;
+  }
+
+  void applyMatBoundaryConditions(DM da, Mat mat);
+  void applyMatBoundaryConditions(ot::DA* da, Mat mat);
+  void applyVecBoundaryConditions(DM da, Vec rhs);
+  void applyVecBoundaryConditions(ot::DA* da, Vec rhs);
+
   feMat* m_Mass;
 
   feMat* m_Stiffness;
@@ -241,6 +267,13 @@ class timeStepper {
   double          m_demin;
 
   int m_uiDof;
+
+  // for generating
+  std::function<Boundary(double, double, double)> m_boundaryCondition;
+
+  // applied to matrix/vector
+  std::vector<PetscInt> m_boundaryRows;
+  std::vector<PetscScalar> m_boundaryValues;
 };
 
 //#include "timeStepper.cpp"

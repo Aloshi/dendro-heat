@@ -133,12 +133,20 @@ int parabolic::init()
     ierr = MatSetUp(m_matJacobian); CHKERRQ(ierr);*/
   }
 
+  // avoids new nonzero errors when boundary conditions are used
+  MatSetOption(m_matJacobian, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE);
+
   // Create a KSP context to solve  @ every timestep
   ierr = KSPCreate(PETSC_COMM_WORLD,&m_ksp); CHKERRQ(ierr);
   ierr = KSPSetOperators(m_ksp,m_matJacobian,m_matJacobian); CHKERRQ(ierr);
   //ierr = KSPSetType(m_ksp,KSPCG); CHKERRQ(ierr);
   ierr = KSPSetFromOptions(m_ksp); CHKERRQ(ierr);
 
+
+  if (m_da)
+    updateBoundaries(m_da);
+  if (m_octDA)
+    updateBoundaries(m_octDA);
 
   return(0);
 }
@@ -175,6 +183,12 @@ int parabolic::solve()
       // Get the Right hand side of the ksp solve using the current solution
       setRHS();
 
+      if (m_da) {
+        applyVecBoundaryConditions(m_da, m_vecRHS);
+      }
+      if (m_octDA) {
+        applyVecBoundaryConditions(m_octDA, m_vecRHS);
+      }
 
 //#ifdef __DEBUG__
       double norm;
@@ -186,6 +200,13 @@ int parabolic::solve()
       if (!m_matrixFree) {
         MatZeroEntries(m_matJacobian);
         m_TalyMat->GetAssembledMatrix_new(&m_matJacobian, 0, m_vecSolution);
+      }
+
+      if (m_da) {
+        applyMatBoundaryConditions(m_da, m_matJacobian);
+      }
+      if (m_octDA) {
+        applyMatBoundaryConditions(m_octDA, m_matJacobian);
       }
 
       // for matrix-free, implicitly "assembled" since m_matJacobian is a shell matrix

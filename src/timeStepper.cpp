@@ -136,5 +136,141 @@ int timeStepper::setAdjoint(bool flag)
   return(0);
 }
 
+void getBoundaries(ot::DA* da, const double* problemSize, int ndof,
+                   std::vector<PetscInt>* rows_out, std::vector<PetscScalar>* values_out,
+                   const std::function<Boundary(double, double, double)>& f)
+{
+  std::map<unsigned int, Boundary> bdy;
+
+  unsigned int maxD = da->getMaxDepth();
+  unsigned int lev;
+  double hx, hy, hz, dist, half;
+  Point pt;
+
+  double xFac = problemSize[0]/((double)(1<<(maxD-1))); 
+  double yFac = problemSize[1]/((double)(1<<(maxD-1)));
+  double zFac = problemSize[2]/((double)(1<<(maxD-1)));
+  double xx[8], yy[8], zz[8];
+  unsigned int idx[8];
+
+  for ( da->init<ot::DA_FLAGS::WRITABLE>(); da->curr() < da->end<ot::DA_FLAGS::WRITABLE>(); da->next<ot::DA_FLAGS::WRITABLE>() ) {
+    // set the value
+    lev = da->getLevel(da->curr());
+    hx = xFac * (1 << (maxD - lev));
+    hy = yFac * (1 << (maxD - lev));
+    hz = zFac * (1 << (maxD - lev));
+
+    half = hx;
+    if (half > hy)
+      half = hy;
+    if (half > hz)
+      half = hz;
+
+    half = half * 0.5;
+
+    pt = da->getCurrentOffset();
+
+    //! get the correct coordinates of the nodes ...
+    unsigned char hangingMask = da->getHangingNodeIndex(da->curr());
+
+    xx[0] = pt.x() * xFac;
+    yy[0] = pt.y() * yFac;
+    zz[0] = pt.z() * zFac;
+    xx[1] = pt.x() * xFac + hx;
+    yy[1] = pt.y() * yFac;
+    zz[1] = pt.z() * zFac;
+    xx[2] = pt.x() * xFac;
+    yy[2] = pt.y() * yFac + hy;
+    zz[2] = pt.z() * zFac;
+    xx[3] = pt.x() * xFac + hx;
+    yy[3] = pt.y() * yFac + hy;
+    zz[3] = pt.z() * zFac;
+
+    xx[4] = pt.x() * xFac;
+    yy[4] = pt.y() * yFac;
+    zz[4] = pt.z() * zFac + hz;
+    xx[5] = pt.x() * xFac + hx;
+    yy[5] = pt.y() * yFac;
+    zz[5] = pt.z() * zFac + hz;
+    xx[6] = pt.x() * xFac;
+    yy[6] = pt.y() * yFac + hy;
+    zz[6] = pt.z() * zFac + hz;
+    xx[7] = pt.x() * xFac + hx;
+    yy[7] = pt.y() * yFac + hy;
+    zz[7] = pt.z() * zFac + hz;
+
+    da->getNodeIndices(idx);
+    for (int i = 0; i < 8; ++i) {
+      if (!(hangingMask & (1u << i))) {
+        auto boundary = f(xx[i], yy[i], zz[i]);
+        if (!boundary.empty()) {
+          bdy[idx[i]] = boundary;
+        }
+      }
+    }
+  } // loop over elements
+
+  if (!da->computedLocalToGlobal())
+    da->computeLocalToGlobalMappings();
+
+  assert(da->computedLocalToGlobal());
+
+  rows_out->clear();
+  values_out->clear();
+
+  // preallocate some memory
+  rows_out->reserve(bdy.size());
+  values_out->reserve(bdy.size());
+
+  const DendroIntL* localToGlobal = da->getLocalToGlobalMap();
+  for (const auto& it : bdy) {
+    for (const auto& direchlet : it.second.direchlets) {
+      rows_out->push_back(ndof * localToGlobal[it.first] + direchlet.first);
+      values_out->push_back(direchlet.second);
+    }
+  }
+}
+
+void timeStepper::setBoundaryCondition(const std::function<Boundary(double, double, double)>& f)
+{
+  m_boundaryCondition = f;
+}
+
+void timeStepper::updateBoundaries(ot::DA* da)
+{
+  if (m_boundaryCondition)
+    getBoundaries(da, getProblemSize(), getDof(), &m_boundaryRows, &m_boundaryValues, m_boundaryCondition);
+}
+
+void timeStepper::updateBoundaries(DM da)
+{
+  assert(false);
+  // not implemented
+}
+
+void timeStepper::applyMatBoundaryConditions(DM da, Mat mat)
+{
+  assert(false);
+  // not implemented
+}
+
+void timeStepper::applyMatBoundaryConditions(ot::DA* da, Mat mat)
+{
+  int errCode = MatZeroRows(mat, m_boundaryRows.size(), m_boundaryRows.data(), 1.0, NULL, NULL);
+  assert(errCode == 0);
+}
+
+void timeStepper::applyVecBoundaryConditions(DM da, Vec rhs)
+{
+  assert(false);
+  // not implemented
+}
+
+void timeStepper::applyVecBoundaryConditions(ot::DA* da, Vec rhs)
+{
+  int errCode = VecSetValues(rhs, m_boundaryRows.size(), m_boundaryRows.data(), m_boundaryValues.data(), INSERT_VALUES);
+  assert(errCode == 0);
+}
+
 /// Jacobian matmult, setRhs will be in the derived class
 

@@ -70,6 +70,15 @@ class nonlinear : public timeStepper
       MatZeroEntries(jac);
       nl->m_TalyMat->GetAssembledMatrix_new(&jac, 0, sol);
     }
+
+    // boundary conditions
+    if (nl->m_da) {
+      nl->applyMatBoundaryConditions(nl->m_da, jac);
+    }
+    if (nl->m_octDA) {
+      nl->applyMatBoundaryConditions(nl->m_octDA, jac);
+    }
+
     return 0;
   }
   static PetscErrorCode FormFunction(SNES snes, Vec in, Vec out, void* ctx) {
@@ -77,6 +86,15 @@ class nonlinear : public timeStepper
 
     VecZeroEntries(out);
     nl->m_TalyVec->addVec_new(in, out, 1.0);
+
+    // boundary conditions
+    if (nl->m_da) {
+      nl->applyVecBoundaryConditions(nl->m_da, out);
+    }
+    if (nl->m_octDA) {
+      nl->applyVecBoundaryConditions(nl->m_octDA, out);
+    }
+
     return 0;
   }
 
@@ -131,6 +149,9 @@ int nonlinear::init()
     ierr = MatSetUp(m_matJacobian); CHKERRQ(ierr);*/
   }
 
+  // avoids new nonzero errors when boundary conditions are used
+  MatSetOption(m_matJacobian, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE);
+
   // Create a KSP context to solve  @ every timestep
   /*ierr = KSPCreate(PETSC_COMM_WORLD,&m_ksp); CHKERRQ(ierr);
   ierr = KSPSetOperators(m_ksp,m_matJacobian,m_matJacobian); CHKERRQ(ierr);
@@ -140,7 +161,13 @@ int nonlinear::init()
   ierr = SNESSetFunction(m_snes, m_vecRHS, FormFunction, this); CHKERRQ(ierr);  // TODO does m_vecRHS need to be initiaized before we call this?
   ierr = SNESSetJacobian(m_snes, m_matJacobian, m_matJacobian, FormJacobian, this); CHKERRQ(ierr);
   ierr = SNESSetFromOptions(m_snes); CHKERRQ(ierr);
-  
+
+  // initialize boundary conditions
+  if (m_da)
+    updateBoundaries(m_da);
+  if (m_octDA)
+    updateBoundaries(m_octDA);
+
 
   return(0);
 }
@@ -280,10 +307,10 @@ int nonlinear::monitor()
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     if (m_da) {
-      write_vector(ss.str().c_str(), m_vecSolution, m_da);
+      write_vector(ss.str().c_str(), m_vecSolution, getDof(), m_da);
     } else {
       std::string asdf = ss.str();
-      octree2VTK(m_octDA, m_vecSolution, asdf);
+      octree2VTK(m_octDA, m_vecSolution, getDof(), asdf);
     }
 
     /*PetscViewer view;

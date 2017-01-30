@@ -15,6 +15,7 @@ static char help[] = "Driver for heat";
 
 #include "massMatrix.h"
 #include "parabolic.h"
+#include "nonlinear.h"
 #include "stiffnessMatrix.h"
 #include "VecIO.h"
 #include "rhs.h"
@@ -296,6 +297,14 @@ int main(int argc, char **argv)
   ts->setTimeInfo(&ti);
   ts->setAdjoint(false); // set if adjoint or forward
   ts->setMatrixFree(mfree);
+  ts->setBoundaryCondition([] (double x, double y, double z) -> Boundary {
+    static const double eps = 1e-6;
+
+    Boundary b;
+    if (fabs(x) < eps || fabs(y) < eps || fabs(z) < eps || fabs(x - 1.0) < eps || fabs(y - 1.0) < eps || fabs(z - 1.0) < eps)
+      b.addDirechlet(0, 0.0);
+    return b;
+  });
 
   if (!rank)
     std::cout <<"Initializing parabolic"<< std::endl;
