@@ -270,6 +270,12 @@ void timeStepper::applyVecBoundaryConditions(ot::DA* da, Vec rhs)
 {
   int errCode = VecSetValues(rhs, m_boundaryRows.size(), m_boundaryRows.data(), m_boundaryValues.data(), INSERT_VALUES);
   assert(errCode == 0);
+
+  errCode = VecAssemblyBegin(rhs);
+  assert(errCode == 0);
+  
+  errCode = VecAssemblyEnd(rhs);
+  assert(errCode == 0);
 }
 
 /// Jacobian matmult, setRhs will be in the derived class
