@@ -1171,25 +1171,14 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
 		
 		unsigned int elemMatSize = m_uiDof*8;
 		int map[8] = {
-				//0, 1, 4, 5, 3, 2, 7, 6
-				0, 1, 3, 2, 4, 5, 7, 6
-				//0, 1, 2, 3, 4, 5, 6, 7
-			     };
+                  0, 1, 3, 2, 4, 5, 7, 6
+                };
 
 ///////////////////////////////////////////////////////////////////////////////////
 		if(!(m_octDA->computedLocalToGlobal())) {
 			m_octDA->computeLocalToGlobalMappings();
 		}
 
-		/*char matType[30];
-		PetscBool typeFound;
-		PetscOptionsGetString(PETSC_NULL, "-fullJacMatType", matType, 30, &typeFound);
-		if(!typeFound) {
-			std::cout<<"I need a MatType for the full Jacobian matrix!"<<std::endl;
-			MPI_Finalize();
-			exit(0);		
-		}*/
-		//m_octDA->createMatrix(*J, matType, 1);
 		MatZeroEntries(*J);
 		std::vector<ot::MatRecord> records;
 
@@ -1214,7 +1203,7 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
     		PetscScalar* local_in = new PetscScalar[m_uiDof*8];
 		PetscScalar* local_out = new PetscScalar[m_uiDof*8];
     		PetscScalar* node_data_temp = new PetscScalar[m_uiDof*8];  // scratch
-   		 double coords[8*3];
+   		double coords[8*3];
 
 		// Independent loop, loop through the nodes this processor owns..
 		for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
@@ -1228,15 +1217,12 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
 
       			unsigned int node_idxes[8];  // holds node IDs; in[m_uiDof*idx[i]] for data
 
-     	 		//stdElemType elemType;
-      			//alignElementAndVertices(m_octDA, elemType, node_idxes);       
-
       			m_octDA->getNodeIndices(node_idxes);
 
       			// build node coordinates (fill coords)
       			build_taly_coordinates(coords, pt, h);
 
-      			// interpolate (local_in -> node_data_temp) TODO check order of arguments
+      			// interpolate (local_in -> node_data_temp)
       			interp_global_to_local(in, node_data_temp, m_octDA, m_uiDof);
 
       			// map from dendro order to taly order (node_data_temp -> local_in);
@@ -1244,7 +1230,7 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
       			dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
 				
       			// calculate values (fill local_out)
-      			GetElementalMatrix(local_in, coords, Ke);	
+      			GetElementalMatrix(local_in, coords, Ke);
 
       			// remap back to Dendro format (local_out -> node_data_temp)
       			// TODO move to TalyMatrix
@@ -1264,21 +1250,12 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
       				}
     			}
 
-      			// interpolate hanging nodes (node_data_temp -> local_out)
-      			// need to zero out local_out first, interp is additive
-      			// for some reason
-      			/*for (int i = 0; i < 8; i++) {
-        			for (int dof = 0; dof < m_uiDof; dof++) {
-          				local_out[i*m_uiDof + dof] = 0.0;
-        			}
-      			}*/
       			interp_local_to_global_matrix(Ke, records, m_octDA, m_uiDof);
-			// TODO How to interpolate this back ???
-			//********************************************//
+
 			if(records.size() > 500) {
 				m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
 			}
-		}//end INDEPENDENT
+		}  //end INDEPENDENT
 
 		m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
 
@@ -1288,8 +1265,6 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
 
 		// Dependent loop ...
 		for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
-
-			
 			int lev = m_octDA->getLevel(m_octDA->curr());
       			Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
       			Point pt = m_octDA->getCurrentOffset();
@@ -1298,9 +1273,6 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
       			pt.z() *= zFac;
 
       			unsigned int node_idxes[8];  // holds node IDs; in[m_uiDof*idx[i]] for data
-
-     	 		//stdElemType elemType;
-      			//alignElementAndVertices(m_octDA, elemType, node_idxes);       
 
       			m_octDA->getNodeIndices(node_idxes);
 
@@ -1315,7 +1287,7 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
       			dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
 
       			// calculate values (fill local_out)
-      			GetElementalMatrix(local_in, coords, Ke);	
+      			GetElementalMatrix(local_in, coords, Ke);
 
 			//change the Ke mapping
 			//*******************************************//
@@ -1336,22 +1308,12 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
       			// TODO move to TalyMatrix
       			//taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
 
-      			// interpolate hanging nodes (node_data_temp -> local_out)
-      			// need to zero out local_out first, interp is additive
-      			// for some reason
-      			/*for (int i = 0; i < 8; i++) {
-        			for (int dof = 0; dof < m_uiDof; dof++) {
-          				local_out[i*m_uiDof + dof] = 0.0;
-        			}
-      			}*/
-			// TODO How to interpolate this back ???
-			//********************************************//
       			interp_local_to_global_matrix(Ke, records, m_octDA, m_uiDof);
 
 			if(records.size() > 500) {
 				m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
 			}
-		}//end DEPENDENT
+		}  //end DEPENDENT
 
 		m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
 
@@ -1363,11 +1325,11 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
     		delete[] local_in;
 		delete[] local_out;
     		delete[] node_data_temp;
-
+                delete[] Ke;
+                delete[] Ke_copy;
 
 		// Restore Vectors ...
 		m_octDA->vecRestoreBuffer(_in,   in, false, false, true,  m_uiDof);
-
 	}
 
 	PetscFunctionReturn(0);

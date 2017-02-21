@@ -66,24 +66,29 @@ double gaussian(double mean = 0.5, double std_deviation = 0.1) {
 
 std::vector<double> genPoints(int n_pts, double mean = 0.5, double dev = 0.1)
 {
+  int mpi_rank, mpi_size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+
   std::vector<double> pts;
   pts.reserve(n_pts*3);
   /*for (int i = 0; i < n_pts * 3; i++) {
-    pts.push_back(gaussian(mean, dev));
-    //pts.push_back(uniform());
+    //pts.push_back(gaussian(mean, dev));
+    pts.push_back(uniform());
   }*/
 
-
-  int n_pts_1d = 16;
-  for (int i = 1; i < n_pts_1d; i++) {
-    double x = ((double)i) / n_pts_1d;
-    for (int j = 1; j < n_pts_1d; j++) {
-      double y = ((double)j) / n_pts_1d;
-      for (int k = 1; k < n_pts_1d; k++) {
-        double z = ((double)k) / n_pts_1d;
-        pts.push_back(x);
-        pts.push_back(y);
-        pts.push_back(z);
+  if (mpi_rank == 0) {
+    int n_pts_1d = 8;
+    for (int i = 1; i < n_pts_1d; i++) {
+      double x = ((double)i) / n_pts_1d;
+      for (int j = 1; j < n_pts_1d; j++) {
+        double y = ((double)j) / n_pts_1d;
+        for (int k = 1; k < n_pts_1d; k++) {
+          double z = ((double)k) / n_pts_1d;
+          pts.push_back(x);
+          pts.push_back(y);
+          pts.push_back(z);
+        }
       }
     }
   }
@@ -125,8 +130,11 @@ std::vector<ot::TreeNode> buildOct()
 
   std::vector<ot::TreeNode> linOct, balOct, newLinOct;
 
+  std::cout << "before points2octree" << std::endl;
   ot::points2Octree(pts, gSize, linOct, dim, maxOctDepth, maxPtsPerOctant, MPI_COMM_WORLD);
+  std::cout << "after points2octree" << std::endl;
   par::sampleSort<ot::TreeNode>(linOct, newLinOct, MPI_COMM_WORLD);
+  std::cout << "after sampleSort" << std::endl;
   ot::balanceOctree (newLinOct, balOct, dim, maxOctDepth, incCorner, MPI_COMM_WORLD);
 
   return balOct;
@@ -301,8 +309,9 @@ int main(int argc, char **argv)
     static const double eps = 1e-6;
 
     Boundary b;
-    if (fabs(x) < eps || fabs(y) < eps || fabs(z) < eps || fabs(x - 1.0) < eps || fabs(y - 1.0) < eps || fabs(z - 1.0) < eps)
+    if (fabs(x) < eps || fabs(y) < eps || fabs(z) < eps || fabs(x - 1.0) < eps || fabs(y - 1.0) < eps || fabs(z - 1.0) < eps) {
       b.addDirechlet(0, 0.0);
+    }
     return b;
   });
 

@@ -19,6 +19,7 @@
 #include "VecIO.h"
 #include "rhs.h"
 #include "DendroIO.h"
+#include "analytic.h"
 
 /**
  *	@brief Main class for a linear parabolic problem
@@ -157,6 +158,8 @@ int parabolic::init()
  **/
 int parabolic::solve()
 {
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   // Time info
 
   //  m_ti.start = m_dStartTime;
@@ -171,6 +174,23 @@ int parabolic::solve()
   ierr = VecCopy(m_vecInitialSolution,m_vecSolution); CHKERRQ(ierr);
   // Time stepping
 
+  // debug print ownership
+  /*{
+    PetscInt m, n;
+    MatGetOwnershipRange(m_matJacobian, &m, &n);
+    PetscSynchronizedPrintf(PETSC_COMM_WORLD, "m: %d, n: %d\n", m, n);
+    PetscSynchronizedFlush(PETSC_COMM_WORLD, stdout);
+  }
+
+  {
+    PetscInt sz, loc_sz;
+    VecGetSize(m_vecRHS, &sz);
+    VecGetLocalSize(m_vecRHS, &loc_sz);
+    PetscSynchronizedPrintf(PETSC_COMM_WORLD, "Total size: %d, local size: %d\n", sz, loc_sz);
+    PetscSynchronizedFlush(PETSC_COMM_WORLD, stdout);
+  }*/
+  
+
   if(!m_bIsAdjoint) // FORWARD PROBLEM
   {
     m_ti->current = m_ti->start;
@@ -183,6 +203,7 @@ int parabolic::solve()
       // Get the Right hand side of the ksp solve using the current solution
       setRHS();
 
+      // apply BC to the vector
       if (m_da) {
         applyVecBoundaryConditions(m_da, m_vecRHS);
       }
@@ -193,7 +214,9 @@ int parabolic::solve()
 //#ifdef __DEBUG__
       double norm;
       ierr = VecNorm(m_vecSolution,NORM_INFINITY,&norm); CHKERRQ(ierr);
-      std::cout << "norm of the solution @ " << m_ti->current  << " = " << norm << std::endl;
+      if (rank == 0) {
+        std::cout << "norm of the solution @ " << m_ti->current  << " = " << norm << std::endl;
+      }
 //#endif
 
       // assemble matrix if this isn't matrix-free
@@ -202,12 +225,52 @@ int parabolic::solve()
         m_TalyMat->GetAssembledMatrix_new(&m_matJacobian, 0, m_vecSolution);
       }
 
+      // debug print matrix/vector
+      /*{
+        std::stringstream ss;
+        ss << "mat_ts_" << m_ti->currentstep << "_before_bc.m";
+
+        PetscViewer viewer;
+        PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
+        PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+        MatView(m_matJacobian, viewer);
+        PetscViewerDestroy(&viewer);
+
+        // should be before the applyVecBoundaryConditions above...!
+        ss.str("");
+        ss << "vec_ts_" << m_ti->currentstep << "_before_bc.m";
+        PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
+        PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+        VecView(m_vecRHS, viewer);
+        PetscViewerDestroy(&viewer);
+      }*/
+
+      // apply boundary conditions to matrix
       if (m_da) {
         applyMatBoundaryConditions(m_da, m_matJacobian);
       }
       if (m_octDA) {
         applyMatBoundaryConditions(m_octDA, m_matJacobian);
       }
+
+      // debug print matrix/vector
+      /*{
+        std::stringstream ss;
+        ss << "mat_ts_" << m_ti->currentstep << "_after_bc.m";
+
+        PetscViewer viewer;
+        PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
+        PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+        MatView(m_matJacobian, viewer);
+        PetscViewerDestroy(&viewer);
+
+        ss.str("");
+        ss << "vec_ts_" << m_ti->currentstep << "_after_bc.m";
+        PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
+        PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+        VecView(m_vecRHS, viewer);
+        PetscViewerDestroy(&viewer);
+      }*/
 
       // for matrix-free, implicitly "assembled" since m_matJacobian is a shell matrix
 
@@ -219,10 +282,10 @@ int parabolic::solve()
 		  monitor();
 		}
 
-#ifdef __DEBUG__
+/*#ifdef __DEBUG__
       ierr = VecNorm(m_vecSolution,NORM_INFINITY,&norm); CHKERRQ(ierr);
       std::cout << "norm of the solution @ " << m_ti->current  << " = " << norm << std::endl;
-#endif
+#endif*/
     }
   }else  // ADJOINT PROBLEM
   {
@@ -317,8 +380,13 @@ int parabolic::monitor()
     if (m_da) {
       write_vector(ss.str().c_str(), m_vecSolution, getDof(), m_da);
     } else {
+      Vec with_analytical;
+      double problemSize[3] = {1.0, 1.0, 1.0};
+      addAnalyticalSolution(m_octDA, problemSize, m_vecSolution, &with_analytical, getDof(), m_ti->current);
+
       std::string asdf = ss.str();
-      octree2VTK(m_octDA, m_vecSolution, getDof(), asdf);
+      octree2VTK(m_octDA, with_analytical, getDof() + 1, asdf);
+      //octree2VTK(m_octDA, m_vecSolution, getDof(), asdf);
     }
 
     /*PetscViewer view;
