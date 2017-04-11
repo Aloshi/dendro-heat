@@ -78,7 +78,7 @@ std::vector<double> genPoints(int n_pts, double mean = 0.5, double dev = 0.1)
   }*/
 
   if (mpi_rank == 0) {
-    int n_pts_1d = 8;
+    int n_pts_1d = 16;
     for (int i = 1; i < n_pts_1d; i++) {
       double x = ((double)i) / n_pts_1d;
       for (int j = 1; j < n_pts_1d; j++) {
@@ -128,16 +128,24 @@ std::vector<ot::TreeNode> buildOct()
   int maxPtsPerOctant = 1;
   bool incCorner = true;
 
-  std::vector<ot::TreeNode> linOct, balOct, newLinOct;
+  /*std::vector<ot::TreeNode> linOct, balOct, newLinOct;
 
   std::cout << "before points2octree" << std::endl;
   ot::points2Octree(pts, gSize, linOct, dim, maxOctDepth, maxPtsPerOctant, MPI_COMM_WORLD);
   std::cout << "after points2octree" << std::endl;
   par::sampleSort<ot::TreeNode>(linOct, newLinOct, MPI_COMM_WORLD);
+  
+  MPI_Barrier(MPI_COMM_WORLD);
+
   std::cout << "after sampleSort" << std::endl;
   ot::balanceOctree (newLinOct, balOct, dim, maxOctDepth, incCorner, MPI_COMM_WORLD);
+  std::cout << "made octree" << std::endl;
 
-  return balOct;
+  return balOct;*/
+
+  std::vector<ot::TreeNode> out;
+  createRegularOctree(out, 4, 3, 8, MPI_COMM_WORLD);
+  return out;
 }
 
 int main(int argc, char **argv)
@@ -156,7 +164,7 @@ int main(int argc, char **argv)
 
   double t0 = 0.0;
   double dt = 0.001;
-  double t1 = 0.01;
+  double t1 = 0.001;
 
   // Initial conditions
   Vec initialTemperature; 
@@ -165,22 +173,22 @@ int main(int argc, char **argv)
   timeInfo ti;
 
   PetscBool mf = PETSC_FALSE;
-  PetscOptionsGetBool(0, "-mfree", &mf, 0);
+  PetscOptionsGetBool(NULL, 0, "-mfree", &mf, 0);
   bool mfree = (mf == PETSC_TRUE);
 
   bool useOctree = true;
   {
     PetscBool temp = PETSC_TRUE;
-    PetscOptionsGetBool(NULL, "-use_octree", &temp, NULL);
+    PetscOptionsGetBool(NULL, NULL, "-use_octree", &temp, NULL);
     useOctree = (temp == PETSC_TRUE);
   }
 
   // get Ns
-  CHKERRQ ( PetscOptionsGetInt(0,"-Ns",&Ns,0) );
-  CHKERRQ ( PetscOptionsGetScalar(0,"-t0",&t0,0) );
-  CHKERRQ ( PetscOptionsGetScalar(0,"-t1",&t1,0) );
-  CHKERRQ ( PetscOptionsGetScalar(0,"-dt",&dt,0) );
-  CHKERRQ ( PetscOptionsGetString(PETSC_NULL, "-pn",problemName,PETSC_MAX_PATH_LEN-1,PETSC_NULL));
+  CHKERRQ ( PetscOptionsGetInt(NULL, 0,"-Ns",&Ns,0) );
+  CHKERRQ ( PetscOptionsGetScalar(NULL, 0,"-t0",&t0,0) );
+  CHKERRQ ( PetscOptionsGetScalar(NULL, 0,"-t1",&t1,0) );
+  CHKERRQ ( PetscOptionsGetScalar(NULL, 0,"-dt",&dt,0) );
+  CHKERRQ ( PetscOptionsGetString(NULL, PETSC_NULL, "-pn",problemName,PETSC_MAX_PATH_LEN-1,PETSC_NULL));
 
   // Time info for timestepping
   ti.start = t0;
@@ -235,6 +243,12 @@ int main(int argc, char **argv)
     setScalarByFunction(octDA, initialTemperature, dof, [](double x, double y, double z, int dof) {
       return sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
     });
+
+    double norm_inf, norm_l2;
+    VecNorm(initialTemperature, NORM_INFINITY, &norm_inf);
+    VecNorm(initialTemperature, NORM_2, &norm_l2);
+    if (!rank)
+      std::cout << "norm_inf: " << norm_inf << ", norm_l2: " << norm_l2 << std::endl;
   }
 
   // print IC

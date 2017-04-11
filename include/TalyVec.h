@@ -81,7 +81,12 @@ class TalyVector : public feVector< TalyVector<Equation, NodeData> >
     for (int k = 0; k < 8; k++) {
       out_local[ndof * k] += be_(k);  // TODO * scale?  
     }
-	return true;
+
+    /*for (int i = 0; i < 8; i++) {
+      out_local[i] = in_local[i];
+    }*/
+
+    return true;
   }
 
   bool preAddVec() {}

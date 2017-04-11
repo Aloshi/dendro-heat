@@ -93,6 +93,35 @@ class parabolic : public timeStepper //<parabolic>
   bool m_matrixFree;
 };
 
+void write_mat_matlab(Mat mat, const char* name)
+{
+  int size;
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+  std::stringstream ss;
+  ss << name << "_size" << size << ".m";
+
+  PetscViewer viewer;
+  PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
+  PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+  MatView(mat, viewer);
+  PetscViewerDestroy(&viewer);
+}
+
+void write_vec_matlab(Vec vec, const char* name)
+{
+  int size;
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+  std::stringstream ss;
+  ss << name << "_size" << size << ".m";
+
+  PetscViewer viewer;
+  PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
+  PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+  VecView(vec, viewer);
+  PetscViewerDestroy(&viewer);
+}
 
 /**
  *	@brief The initialization function where the Jacobian matrix,
@@ -223,27 +252,8 @@ int parabolic::solve()
       if (!m_matrixFree) {
         MatZeroEntries(m_matJacobian);
         m_TalyMat->GetAssembledMatrix_new(&m_matJacobian, 0, m_vecSolution);
+        write_mat_matlab(m_matJacobian, "mat_before_bc");
       }
-
-      // debug print matrix/vector
-      /*{
-        std::stringstream ss;
-        ss << "mat_ts_" << m_ti->currentstep << "_before_bc.m";
-
-        PetscViewer viewer;
-        PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
-        PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
-        MatView(m_matJacobian, viewer);
-        PetscViewerDestroy(&viewer);
-
-        // should be before the applyVecBoundaryConditions above...!
-        ss.str("");
-        ss << "vec_ts_" << m_ti->currentstep << "_before_bc.m";
-        PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
-        PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
-        VecView(m_vecRHS, viewer);
-        PetscViewerDestroy(&viewer);
-      }*/
 
       // apply boundary conditions to matrix
       if (m_da) {
@@ -253,24 +263,7 @@ int parabolic::solve()
         applyMatBoundaryConditions(m_octDA, m_matJacobian);
       }
 
-      // debug print matrix/vector
-      /*{
-        std::stringstream ss;
-        ss << "mat_ts_" << m_ti->currentstep << "_after_bc.m";
-
-        PetscViewer viewer;
-        PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
-        PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
-        MatView(m_matJacobian, viewer);
-        PetscViewerDestroy(&viewer);
-
-        ss.str("");
-        ss << "vec_ts_" << m_ti->currentstep << "_after_bc.m";
-        PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
-        PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
-        VecView(m_vecRHS, viewer);
-        PetscViewerDestroy(&viewer);
-      }*/
+      write_mat_matlab(m_matJacobian, "mat_after_bc");
 
       // for matrix-free, implicitly "assembled" since m_matJacobian is a shell matrix
 
@@ -342,7 +335,11 @@ bool parabolic::setRHS()
   VecZeroEntries(m_vecRHS);
 
   if (m_TalyVec) {
+    // m_vecRHS = M * m_vecSolution
+    // save m_vecSolution before and after
+    write_vec_matlab(m_vecSolution, "ic_addVec");
     m_TalyVec->addVec_new(m_vecSolution, m_vecRHS, 1.0);
+    write_vec_matlab(m_vecRHS, "rhs");
   } else {
     ((forceVector*)m_Force)->setPrevTS(m_vecSolution);
     m_Force->addVec(m_vecRHS, 1.0/*1.0 / m_ti->step*/);

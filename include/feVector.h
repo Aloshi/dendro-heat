@@ -371,8 +371,8 @@ feVector<T>::~feVector() {
  *  which are computed by the ElementalMatrix() function. Use the Assemble()
  *  function for matrix based methods.
  **/
-#undef __FUNCT__
-#define __FUNCT__ "feVector_AddVec_Indx"
+//#undef __FUNCT__
+//#define __FUNCT__ "feVector_AddVec_Indx"
 template <typename T>
 bool feVector<T>::addVec(Vec _in, double scale, int indx){
   PetscFunctionBegin;
@@ -537,11 +537,11 @@ inline void taly_to_dendro(void* dest, void* src, size_t bytes)
   }
 }*/
 
-#undef __FUNCT__
-#define __FUNCT__ "feVector_AddVec_new_Indx"
+//#undef __FUNCT__
+//#define __FUNCT__ "feVector_AddVec_new_Indx"
 template <typename T>
 bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
-  PetscFunctionBegin;
+  //PetscFunctionBegin;
 
 #ifdef __DEBUG__
   assert ( ( m_daType == PETSC ) || ( m_daType == OCT ) );
@@ -708,6 +708,7 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
     //m_octDA->updateGhostsBegin<PetscScalar>(in, false, m_uiDof);
     // m_octDA->ReadFromGhostsBegin<PetscScalar>(in, false, m_uiDof);
     m_octDA->ReadFromGhostsBegin<PetscScalar>(in, m_uiDof);
+    m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
     preAddVec();
 
     const unsigned int maxD = m_octDA->getMaxDepth();
@@ -721,7 +722,7 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
     double coords[8*3];
 
     // Independent loop, loop through the nodes this processor owns..
-    for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
+    /*for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
       int lev = m_octDA->getLevel(m_octDA->curr());
       Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
       Point pt = m_octDA->getCurrentOffset();
@@ -757,14 +758,14 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
 
       interp_local_to_global(node_data_temp, out, m_octDA, m_uiDof);
 
-    }  //end INDEPENDENT
+    }*/  //end INDEPENDENT
 
     // Wait for communication to end.
     //m_octDA->updateGhostsEnd<PetscScalar>(in);
-    m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
+    //m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
 
     // Dependent loop ...
-    for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
+    for ( m_octDA->init<ot::DA_FLAGS::ALL>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::ALL>(); m_octDA->next<ot::DA_FLAGS::ALL>() ) {
       int lev = m_octDA->getLevel(m_octDA->curr());
       Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
       Point pt = m_octDA->getCurrentOffset();
@@ -789,6 +790,9 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
       for (int i = 0; i < 8; i++) {
         // TODO m_uiDof
         local_out[i] = 0.0;
+
+        //out[node_idxes[i]] = in[node_idxes[i]];  //sin(M_PI * coords[i*3]) * sin(M_PI * coords[i*3+1]) * sin(M_PI * coords[i*3+2]);
+        //node_data_temp[i] = in[node_idxes[i]];  //sin(M_PI * coords[i*3]) * sin(M_PI * coords[i*3+1]) * sin(M_PI * coords[i*3+2]);
       }
 
       // calculate values (fill local_out)
@@ -831,8 +835,8 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
  *  The product is directly calculated from the elemental matrices,
  *  ComputeNodalFunction
  **/
-#undef __FUNCT__
-#define __FUNCT__ "feVector_ComputeVec"
+//#undef __FUNCT__
+//#define __FUNCT__ "feVector_ComputeVec"
 template <typename T>
 bool feVector<T>::computeVec(Vec _in, Vec _out,double scale){
   PetscFunctionBegin;
@@ -911,8 +915,8 @@ bool feVector<T>::computeVec(Vec _in, Vec _out,double scale){
   PetscFunctionReturn(0);
 }
 
-#undef __FUNCT__
-#define __FUNCT__ "alignElementAndVertices"
+//#undef __FUNCT__
+//#define __FUNCT__ "alignElementAndVertices"
 template <typename T>
 PetscErrorCode feVector<T>::alignElementAndVertices(ot::DA * da, stdElemType & sType, unsigned int* indices) {
   PetscFunctionBegin;
@@ -941,8 +945,8 @@ PetscErrorCode feVector<T>::alignElementAndVertices(ot::DA * da, stdElemType & s
   PetscFunctionReturn(0);
 }//end function.
 
-#undef __FUNCT__
-#define __FUNCT__ "mapVtxAndFlagsToOrientation"
+//#undef __FUNCT__
+//#define __FUNCT__ "mapVtxAndFlagsToOrientation"
 template <typename T>
 PetscErrorCode feVector<T>::mapVtxAndFlagsToOrientation(int childNum, unsigned int* indices, unsigned char & mask) {
   PetscFunctionBegin;
