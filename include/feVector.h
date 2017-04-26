@@ -722,7 +722,7 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
     double coords[8*3];
 
     // Independent loop, loop through the nodes this processor owns..
-    /*for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
+    for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
       int lev = m_octDA->getLevel(m_octDA->curr());
       Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
       Point pt = m_octDA->getCurrentOffset();
@@ -736,11 +736,10 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
       // build node coordinates (fill coords)
       build_taly_coordinates(coords, pt, h);
 
-      // interpolate (local_in -> node_data_temp) TODO check order of arguments
+      // interpolate (in -> node_data_temp)
       interp_global_to_local(in, node_data_temp, m_octDA, m_uiDof);
 
       // map from dendro order to taly order (node_data_temp -> local_in);
-      // TODO move to TalyMatrix
       dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
 
       // initialize local_out
@@ -753,19 +752,17 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
       ElementalAddVec(local_in, local_out, coords, scale);
 
       // remap back to Dendro format (local_out -> node_data_temp)
-      // TODO move to TalyMatrix
       taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
 
       interp_local_to_global(node_data_temp, out, m_octDA, m_uiDof);
 
-    }*/  //end INDEPENDENT
+    }  //end INDEPENDENT
 
     // Wait for communication to end.
-    //m_octDA->updateGhostsEnd<PetscScalar>(in);
     //m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
 
     // Dependent loop ...
-    for ( m_octDA->init<ot::DA_FLAGS::ALL>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::ALL>(); m_octDA->next<ot::DA_FLAGS::ALL>() ) {
+    for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
       int lev = m_octDA->getLevel(m_octDA->curr());
       Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
       Point pt = m_octDA->getCurrentOffset();
@@ -779,32 +776,27 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
       // build node coordinates (fill coords)
       build_taly_coordinates(coords, pt, h);
 
-      // interpolate (local_in -> node_data_temp) TODO check order of arguments
+      // interpolate (in -> node_data_temp)
       interp_global_to_local(in, node_data_temp, m_octDA, m_uiDof);
 
       // map from dendro order to taly order (node_data_temp -> local_in);
-      // TODO move to TalyMatrix
       dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
 
-      // initialize local_out?
+      // initialize local_out
       for (int i = 0; i < 8; i++) {
         // TODO m_uiDof
         local_out[i] = 0.0;
-
-        //out[node_idxes[i]] = in[node_idxes[i]];  //sin(M_PI * coords[i*3]) * sin(M_PI * coords[i*3+1]) * sin(M_PI * coords[i*3+2]);
-        //node_data_temp[i] = in[node_idxes[i]];  //sin(M_PI * coords[i*3]) * sin(M_PI * coords[i*3+1]) * sin(M_PI * coords[i*3+2]);
       }
 
       // calculate values (fill local_out)
       ElementalAddVec(local_in, local_out, coords, scale);
 
       // remap back to Dendro format (local_out -> node_data_temp)
-      // TODO move to TalyMatrix
       taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
 
-      // interpolate hanging nodes (node_data_temp -> local_out)
+      // interpolate hanging nodes (node_data_temp -> out)
       interp_local_to_global(node_data_temp, out, m_octDA, m_uiDof);
-    }//end DEPENDENT
+    }//end DEPENDENT 
 
     delete[] local_in;
     delete[] local_out;

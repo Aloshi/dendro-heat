@@ -2,6 +2,7 @@
 #define __FE_MATRIX_H_
 
 #include <string>
+#include <set>
 #include "odaUtils.h"
 #include "feMat.h"
 #include "timeInfo.h"
@@ -1190,9 +1191,9 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
 		m_octDA->vecGetBuffer(_in,   in, false, false, true,  m_uiDof);
 
 		// start comm for in ...
-		//m_octDA->updateGhostsBegin<PetscScalar>(in, false, m_uiDof);
 		// m_octDA->ReadFromGhostsBegin<PetscScalar>(in, false, m_uiDof);
 		m_octDA->ReadFromGhostsBegin<PetscScalar>(in, m_uiDof);
+		m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
 		preMatVec();
 
 		const unsigned int maxD = m_octDA->getMaxDepth();
@@ -1201,13 +1202,24 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
 		const double zFac = m_dLz/((double)(1<<(maxD-1)));
 
     		PetscScalar* local_in = new PetscScalar[m_uiDof*8];
-		PetscScalar* local_out = new PetscScalar[m_uiDof*8];
     		PetscScalar* node_data_temp = new PetscScalar[m_uiDof*8];  // scratch
    		double coords[8*3];
 
-		// Independent loop, loop through the nodes this processor owns..
-		for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
+                int mpi_size, rank;
+                MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+                std::set<unsigned int> my_nodes, my_elems;
+                std::set< std::tuple<int, int, int> > my_pts;
+                m_octDA->computeLocalToGlobalMappings();
+                m_octDA->computeLocalToGlobalElemMappings();
+                DendroIntL* localToGlobal = m_octDA->getLocalToGlobalMap();
+                DendroIntL* localToGlobalElems = m_octDA->getLocalToGlobalElemsMap();
+
+		// Independent loop, loop through the nodes this processor owns..
+		//for ( m_octDA->init<ot::DA_FLAGS::ALL>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::ALL>(); m_octDA->next<ot::DA_FLAGS::ALL>() ) {
+
+		for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
 			int lev = m_octDA->getLevel(m_octDA->curr());
       			Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
       			Point pt = m_octDA->getCurrentOffset();
@@ -1216,34 +1228,37 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
       			pt.z() *= zFac;
 
       			unsigned int node_idxes[8];  // holds node IDs; in[m_uiDof*idx[i]] for data
-
       			m_octDA->getNodeIndices(node_idxes);
+
+                        for (unsigned int i = 0; i < 8; i++)
+                          my_nodes.insert(localToGlobal[node_idxes[i]]);
+                        my_elems.insert(localToGlobalElems[m_octDA->curr()]);
+
+                        Point rawPt = m_octDA->getCurrentOffset();
+                        auto ptTuple = std::make_tuple<int, int, int>(rawPt.xint(), rawPt.yint(), rawPt.zint());
+                        bool exists = my_pts.find(ptTuple) != my_pts.end();
+                        my_pts.insert(ptTuple);
+                        assert(!exists);
 
       			// build node coordinates (fill coords)
       			build_taly_coordinates(coords, pt, h);
 
-      			// interpolate (local_in -> node_data_temp)
+      			// interpolate (in -> node_data_temp)
       			interp_global_to_local(in, node_data_temp, m_octDA, m_uiDof);
 
       			// map from dendro order to taly order (node_data_temp -> local_in);
-      			// TODO move to TalyMatrix
       			dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
-				
-      			// calculate values (fill local_out)
+
+      			// calculate values (fill Ke)
       			GetElementalMatrix(local_in, coords, Ke);
 
-      			// remap back to Dendro format (local_out -> node_data_temp)
-      			// TODO move to TalyMatrix
-      			//taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
-
 			//change the Ke mapping
-			//*******************************************//
 			for (int k = 0; k < 8; k++) {
       				for (int j=0; j<8; j++) {
 					Ke_copy[8*k+j] = Ke[8*k+j];
       				}
     			}
-					
+
 			for (int k = 0; k < 8; k++) {
       				for (int j=0; j<8; j++) {
 					Ke[8*k+j] = Ke_copy[8*map[k]+map[j]];
@@ -1253,7 +1268,7 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
       			interp_local_to_global_matrix(Ke, records, m_octDA, m_uiDof);
 
 			if(records.size() > 500) {
-				m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
+                          m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
 			}
 		}  //end INDEPENDENT
 
@@ -1261,10 +1276,11 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
 
 		// Wait for communication to end.
 		//m_octDA->updateGhostsEnd<PetscScalar>(in);
-		m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
+		//m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
 
 		// Dependent loop ...
-		for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
+		//for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
+		for ( m_octDA->init<ot::DA_FLAGS::W_DEPENDENT>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::W_DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::W_DEPENDENT>() ) {
 			int lev = m_octDA->getLevel(m_octDA->curr());
       			Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
       			Point pt = m_octDA->getCurrentOffset();
@@ -1273,24 +1289,35 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
       			pt.z() *= zFac;
 
       			unsigned int node_idxes[8];  // holds node IDs; in[m_uiDof*idx[i]] for data
-
       			m_octDA->getNodeIndices(node_idxes);
+
+                        for (unsigned int i = 0; i < 8; i++)
+                          my_nodes.insert(localToGlobal[node_idxes[i]]);
+                        my_elems.insert(localToGlobalElems[m_octDA->curr()]);
+
+                        Point rawPt = m_octDA->getCurrentOffset();
+                        auto ptTuple = std::make_tuple<int, int, int>(rawPt.xint(), rawPt.yint(), rawPt.zint());
+                        bool exists = my_pts.find(ptTuple) != my_pts.end();
+                        my_pts.insert(ptTuple);
+                        if (exists) {
+                          PetscSynchronizedPrintf(PETSC_COMM_WORLD, "double-counted elem on proc %d, pt: %d, %d, %d, off: %d (dependent)\n", rank, rawPt.xint(), rawPt.yint(), rawPt.zint(), m_octDA->curr());
+                          continue;
+                        }
+                        //assert(!exists);
 
       			// build node coordinates (fill coords)
       			build_taly_coordinates(coords, pt, h);
 
-      			// interpolate (local_in -> node_data_temp) TODO check order of arguments
+      			// interpolate (in -> node_data_temp)
       			interp_global_to_local(in, node_data_temp, m_octDA, m_uiDof);
 
       			// map from dendro order to taly order (node_data_temp -> local_in);
-      			// TODO move to TalyMatrix
       			dendro_to_taly(local_in, node_data_temp, sizeof(local_in[0])*m_uiDof);
 
-      			// calculate values (fill local_out)
+      			// calculate values (fill Ke)
       			GetElementalMatrix(local_in, coords, Ke);
 
 			//change the Ke mapping
-			//*******************************************//
 			for (int k = 0; k < 8; k++) {
       				for (int j=0; j<8; j++) {
 					Ke_copy[8*k+j] = Ke[8*k+j];
@@ -1303,19 +1330,16 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
       				}
     			}
 
-			
-      			// remap back to Dendro format (local_out -> node_data_temp)
-      			// TODO move to TalyMatrix
-      			//taly_to_dendro(node_data_temp, local_out, sizeof(local_out[0])*m_uiDof);
-
       			interp_local_to_global_matrix(Ke, records, m_octDA, m_uiDof);
 
 			if(records.size() > 500) {
-				m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
+                          m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
 			}
 		}  //end DEPENDENT
 
 		m_octDA->setValuesInMatrix(*J, records, 1, ADD_VALUES);
+
+                PetscSynchronizedFlush(PETSC_COMM_WORLD, stdout);
 
 		postMatVec();
 
@@ -1323,13 +1347,99 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
 		MatAssemblyEnd(*J, MAT_FINAL_ASSEMBLY);
 
     		delete[] local_in;
-		delete[] local_out;
     		delete[] node_data_temp;
                 delete[] Ke;
                 delete[] Ke_copy;
 
 		// Restore Vectors ...
 		m_octDA->vecRestoreBuffer(_in,   in, false, false, true,  m_uiDof);
+
+                //PetscSynchronizedFlush(PETSC_COMM_WORLD, stdout);
+                // debug print
+                {
+                  {
+                    std::vector<unsigned int> nodes_seen;
+                    std::copy(my_nodes.begin(), my_nodes.end(), std::back_inserter(nodes_seen));
+
+                    std::vector<int> sizes(mpi_size);
+                    int lcl_size = (int) nodes_seen.size();
+                    MPI_Gather(&lcl_size, 1, MPI_INT, sizes.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+                    int total = 0;
+                    std::vector<int> displs(mpi_size);
+                    for (int i = 0; i < mpi_size; i++) {
+                      displs.at(i) = total;
+                      total += sizes.at(i);
+                    }
+
+                    std::vector<unsigned int> all_seen(total);
+                    MPI_Gatherv(nodes_seen.data(), nodes_seen.size(), MPI_INT, all_seen.data(), sizes.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
+
+                    if (rank == 0) {
+                      unsigned int total_nodes = *std::max_element(all_seen.begin(), all_seen.end()) + 1;
+                      std::vector< std::vector<int> > seen_by(total_nodes);
+
+                      for (int i = 0; i < mpi_size; i++) {
+                        for (unsigned int j = 0; j < sizes.at(i); j++) {
+                          unsigned int node = all_seen.at(displs.at(i) + j);
+                          seen_by.at(node).push_back(i);
+                        }
+                      }
+
+                      /*for (unsigned int i = 0; i < seen_by.size(); i++) {
+                        std::cout << "Global node " << i << " was written to by procs: ";
+                        for (unsigned int j = 0; j < seen_by.at(i).size(); j++) {
+                          std::cout << seen_by.at(i).at(j) << "  ";
+                        }
+                        std::cout << "\n";
+                      }*/
+                    }
+                  }
+
+                  //std::cout << "\n\n------------\n\n";
+
+                  {
+                    std::vector<unsigned int> elems_seen;
+                    std::copy(my_elems.begin(), my_elems.end(), std::back_inserter(elems_seen));
+
+                    std::vector<int> sizes(mpi_size);
+                    int lcl_size = (int) elems_seen.size();
+                    MPI_Gather(&lcl_size, 1, MPI_INT, sizes.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+                    int total = 0;
+                    std::vector<int> displs(mpi_size);
+                    for (int i = 0; i < mpi_size; i++) {
+                      displs.at(i) = total;
+                      total += sizes.at(i);
+                    }
+
+                    std::vector<unsigned int> all_seen(total);
+                    MPI_Gatherv(elems_seen.data(), elems_seen.size(), MPI_INT, all_seen.data(), sizes.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
+
+                    if (rank == 0) {
+                      unsigned int total_elems = *std::max_element(all_seen.begin(), all_seen.end()) + 1;
+                      std::vector< std::vector<int> > seen_by(total_elems);
+
+                      for (int i = 0; i < mpi_size; i++) {
+                        for (unsigned int j = 0; j < sizes.at(i); j++) {
+                          unsigned int elem = all_seen.at(displs.at(i) + j);
+                          seen_by.at(elem).push_back(i);
+                        }
+                      }
+
+                      for (unsigned int i = 0; i < seen_by.size(); i++) {
+                        if (seen_by.at(i).size() > 1) {
+                          std::cout << "Global elem " << i << " was written to by procs: ";
+                          for (unsigned int j = 0; j < seen_by.at(i).size(); j++) {
+                            std::cout << seen_by.at(i).at(j) << "  ";
+                          }
+                          assert(false);
+                          std::cout << "\n";
+                        }
+                      }
+                    }
+                  }
+                }
 	}
 
 	PetscFunctionReturn(0);

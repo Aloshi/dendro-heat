@@ -164,7 +164,7 @@ int main(int argc, char **argv)
 
   double t0 = 0.0;
   double dt = 0.001;
-  double t1 = 0.001;
+  double t1 = 0.010;
 
   // Initial conditions
   Vec initialTemperature; 
@@ -258,6 +258,11 @@ int main(int argc, char **argv)
 
   if (octDA) {
     octree2VTK(octDA, initialTemperature, dof, "ic");
+
+    // print l2 error with IC
+    double l2_err_init = calc_l2_error(octDA, gSize, initialTemperature, dof, 0.0);
+    if (rank == 0)
+      std::cout << "l2 error at ic: " << l2_err_init << "\n";
   }
 
   unsigned int numSteps = (unsigned int)(ceil(( ti.stop - ti.start)/ti.step));

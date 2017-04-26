@@ -252,7 +252,7 @@ int parabolic::solve()
       if (!m_matrixFree) {
         MatZeroEntries(m_matJacobian);
         m_TalyMat->GetAssembledMatrix_new(&m_matJacobian, 0, m_vecSolution);
-        write_mat_matlab(m_matJacobian, "mat_before_bc");
+        //write_mat_matlab(m_matJacobian, "mat_before_bc");
       }
 
       // apply boundary conditions to matrix
@@ -263,7 +263,7 @@ int parabolic::solve()
         applyMatBoundaryConditions(m_octDA, m_matJacobian);
       }
 
-      write_mat_matlab(m_matJacobian, "mat_after_bc");
+      //write_mat_matlab(m_matJacobian, "mat_after_bc");
 
       // for matrix-free, implicitly "assembled" since m_matJacobian is a shell matrix
 
@@ -337,9 +337,8 @@ bool parabolic::setRHS()
   if (m_TalyVec) {
     // m_vecRHS = M * m_vecSolution
     // save m_vecSolution before and after
-    write_vec_matlab(m_vecSolution, "ic_addVec");
     m_TalyVec->addVec_new(m_vecSolution, m_vecRHS, 1.0);
-    write_vec_matlab(m_vecRHS, "rhs");
+    //write_vec_matlab(m_vecRHS, "rhs");
   } else {
     ((forceVector*)m_Force)->setPrevTS(m_vecSolution);
     m_Force->addVec(m_vecRHS, 1.0/*1.0 / m_ti->step*/);
@@ -377,12 +376,16 @@ int parabolic::monitor()
     if (m_da) {
       write_vector(ss.str().c_str(), m_vecSolution, getDof(), m_da);
     } else {
+      std::string asdf = ss.str();
       Vec with_analytical;
       double problemSize[3] = {1.0, 1.0, 1.0};
+      double l2_err = calc_l2_error(m_octDA, problemSize, m_vecSolution, getDof(), m_ti->current);
       addAnalyticalSolution(m_octDA, problemSize, m_vecSolution, &with_analytical, getDof(), m_ti->current);
-
-      std::string asdf = ss.str();
       octree2VTK(m_octDA, with_analytical, getDof() + 1, asdf);
+
+      if (rank == 0)
+        std::cout << "l2 error: " << l2_err << std::endl;
+
       //octree2VTK(m_octDA, m_vecSolution, getDof(), asdf);
     }
 
