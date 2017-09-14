@@ -28,7 +28,7 @@ class HTEquation : public TALYFEMLIB::CEquation<HTNodeData> {
 
   explicit HTEquation()
       : TALYFEMLIB::CEquation<HTNodeData>(false, TALYFEMLIB::kAssembleGaussPoints) {
-    K_ = 1.0;
+    K_ = 1.0 / (3 * M_PI * M_PI);
     dt_ = 0.001;  // TODO
   }
 
@@ -79,6 +79,20 @@ class HTEquation : public TALYFEMLIB::CEquation<HTNodeData> {
     const int n_basis_functions = fe.nbf();  // # of basis functions
     const double detJxW = fe.detJxW();  // (determinant of J) cross W
     double k_val = K_;  // thermal diffusivity in heat equation
+
+    /*std::cout << "itg pt #" << fe.cur_itg_pt_num() << " " << fe.itg_pt() << ", detJ: " << detJxW << "\n";
+    for (int i = 0; i < n_basis_functions; i++) {
+      std::cout << "N(" << i << ") = " << fe.N(i) << "  ";
+    }
+    std::cout << "\n";
+
+    for (int i = 0; i < n_basis_functions; i++) {
+      for (int j = 0; j < fe.nsd(); j++) {
+        std::cout << "dN(" << i << ", " << j << ") = " << fe.dN(i, j);
+      }
+      std::cout << "\n";
+    } 
+    std::cout << "\n";*/
 
     // in order to assemble the gauss point, we loop over each pair of basis
     // functions and calculate the individual contributions to the 'Ae' matrix

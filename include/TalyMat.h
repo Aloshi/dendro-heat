@@ -79,8 +79,11 @@ class TalyMatrix : public feMatrix< TalyMatrix<Equation, NodeData> >
     for (int k = 0; k < 8; k++) {
       for (int j=0; j<8; j++) {
 	mat[8*k+j] = Ae_(k, j);
+        //std::cout << "Ae(" << k << ", " << j << ") = " << Ae_(k, j) << "\n";
       }
+     // std::cout << "\n";
     }
+   // std::cout << "\n";
     
     return true;
   }

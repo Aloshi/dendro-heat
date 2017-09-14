@@ -93,13 +93,13 @@ class parabolic : public timeStepper //<parabolic>
   bool m_matrixFree;
 };
 
-void write_mat_matlab(Mat mat, const char* name)
+void write_mat_matlab(Mat mat, const char* name, double ts)
 {
   int size;
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
   std::stringstream ss;
-  ss << name << "_size" << size << ".m";
+  ss << name << "_ts" << (int) ts << ".m";
 
   PetscViewer viewer;
   PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
@@ -108,13 +108,13 @@ void write_mat_matlab(Mat mat, const char* name)
   PetscViewerDestroy(&viewer);
 }
 
-void write_vec_matlab(Vec vec, const char* name)
+void write_vec_matlab(Vec vec, const char* name, double ts)
 {
   int size;
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
   std::stringstream ss;
-  ss << name << "_size" << size << ".m";
+  ss << name << "_ts" << (int) ts << ".m";
 
   PetscViewer viewer;
   PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
@@ -240,6 +240,8 @@ int parabolic::solve()
         applyVecBoundaryConditions(m_octDA, m_vecRHS);
       }
 
+      write_vec_matlab(m_vecRHS, "vec_after_bc", m_ti->current / m_ti->step);
+
 //#ifdef __DEBUG__
       double norm;
       ierr = VecNorm(m_vecSolution,NORM_INFINITY,&norm); CHKERRQ(ierr);
@@ -263,7 +265,7 @@ int parabolic::solve()
         applyMatBoundaryConditions(m_octDA, m_matJacobian);
       }
 
-      //write_mat_matlab(m_matJacobian, "mat_after_bc");
+      write_mat_matlab(m_matJacobian, "mat_after_bc", m_ti->current / m_ti->step);
 
       // for matrix-free, implicitly "assembled" since m_matJacobian is a shell matrix
 
@@ -354,18 +356,18 @@ bool parabolic::setRHSFunction(Vec In, Vec Out)
 int parabolic::monitor()
 {
   if(fmod(m_ti->currentstep,(double)(m_iMon)) < 0.0001)
-	 {
-		std::cout << "current step in the monitor " << m_ti->currentstep << std::endl;
-		double norm;
-		int ierr;
-		Vec tempSol;
-		ierr = VecDuplicate(m_vecSolution,&tempSol);  CHKERRQ(ierr);
+   {
+          std::cout << "current step in the monitor " << m_ti->currentstep << std::endl;
+          double norm;
+          int ierr;
+          Vec tempSol;
+          ierr = VecDuplicate(m_vecSolution,&tempSol);  CHKERRQ(ierr);
 #ifdef __DEBUG__
-		//		VecNorm(m_vecSolution,NORM_INFINITY,&norm);
-		//		PetscPrintf(0,"solution norm b4 push back %f\n",norm);
+          //		VecNorm(m_vecSolution,NORM_INFINITY,&norm);
+          //		PetscPrintf(0,"solution norm b4 push back %f\n",norm);
 #endif
-		ierr = VecCopy(m_vecSolution,tempSol); CHKERRQ(ierr);
-		m_solVector.push_back(tempSol);
+          ierr = VecCopy(m_vecSolution,tempSol); CHKERRQ(ierr);
+          m_solVector.push_back(tempSol);
 
     std::stringstream ss;
     ss << "timestep_" << m_ti->currentstep;
@@ -382,9 +384,10 @@ int parabolic::monitor()
       double l2_err = calc_l2_error(m_octDA, problemSize, m_vecSolution, getDof(), m_ti->current);
       addAnalyticalSolution(m_octDA, problemSize, m_vecSolution, &with_analytical, getDof(), m_ti->current);
       octree2VTK(m_octDA, with_analytical, getDof() + 1, asdf);
+      VecDestroy(&with_analytical);
 
       if (rank == 0)
-        std::cout << "l2 error: " << l2_err << std::endl;
+        std::cout << "l2 error @ " << m_ti->current << " = " << l2_err << std::endl;
 
       //octree2VTK(m_octDA, m_vecSolution, getDof(), asdf);
     }

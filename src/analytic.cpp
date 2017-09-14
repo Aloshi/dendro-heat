@@ -140,6 +140,7 @@ double calc_l2_error(ot::DA* da, const double* problemSize, Vec u_vec, int ndof,
   da->ReadFromGhostsEnd<PetscScalar>(u_vec_data);
 
   double l2_error = 0.0;
+  double a_norm = 0.0, c_norm = 0.0;
   //for ( da->init<ot::DA_FLAGS::ALL>(); da->curr() < da->end<ot::DA_FLAGS::ALL>(); da->next<ot::DA_FLAGS::ALL>() ) {
   for ( da->init<ot::DA_FLAGS::WRITABLE>(); da->curr() < da->end<ot::DA_FLAGS::WRITABLE>(); da->next<ot::DA_FLAGS::WRITABLE>() ) {
     int lev = da->getLevel(da->curr());
@@ -171,14 +172,24 @@ double calc_l2_error(ot::DA* da, const double* problemSize, Vec u_vec, int ndof,
     while (fe.next_itg_pt()) {
       double val_c = gf.valueFEM(fe, 0);
       double val_a = calc_u_analytical(fe.position().x(), fe.position().y(), fe.position().z(), ts);
+      c_norm += val_c * val_c * fe.detJxW();
+      a_norm += val_a * val_a * fe.detJxW();
       l2_error += (val_c - val_a) * (val_c - val_a) * fe.detJxW();
     }
   }
 
   da->vecRestoreBuffer(u_vec, u_vec_data, false, false, true, ndof);
 
-  double all_err;
+  double all_err, all_a_norm, all_c_norm;
   MPI_Allreduce(&l2_error, &all_err, 1, MPI_DOUBLE, MPI_SUM, PETSC_COMM_WORLD);
+  MPI_Allreduce(&a_norm, &all_a_norm, 1, MPI_DOUBLE, MPI_SUM, PETSC_COMM_WORLD);
+  MPI_Allreduce(&c_norm, &all_c_norm, 1, MPI_DOUBLE, MPI_SUM, PETSC_COMM_WORLD);
+
+  int rank;
+  MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+  if (!rank)
+    std::cout << "a norm: " << all_a_norm << ", c norm: " << all_c_norm << "\n";
+
   return sqrt(all_err);
 }
 
