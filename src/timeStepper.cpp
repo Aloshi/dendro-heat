@@ -260,6 +260,29 @@ void timeStepper::applyMatBoundaryConditions(ot::DA* da, Mat mat)
   assert(errCode == 0);
 }
 
+void timeStepper::applyMatVecBoundaryConditions(ot::DA* da, Vec _in, Vec _out)
+{
+  PetscScalar* in;
+  PetscScalar* out;
+
+  da->vecGetBuffer(_in, in, false, false, true, m_uiDof);
+  da->vecGetBuffer(_out, out, false, false, false, m_uiDof);
+
+  PetscInt low, high;
+  int ierr = VecGetOwnershipRange(_out, &low, &high);
+  assert(ierr == 0);
+
+  for (unsigned int i = 0; i < m_boundaryRows.size(); i++) {
+    PetscInt row = m_boundaryRows[i];
+    if (row >= low && row < high) {
+      out[row] = in[row];
+    }
+  }
+
+  da->vecRestoreBuffer(_in, in, false, false, true, m_uiDof);
+  da->vecRestoreBuffer(_out, out, false, false, false, m_uiDof);
+}
+
 void timeStepper::applyVecBoundaryConditions(DM da, Vec rhs)
 {
   assert(false);

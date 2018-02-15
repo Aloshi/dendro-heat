@@ -1,7 +1,7 @@
 #include "DendroIO.h"
 #include "interp.h"
 
-double gSize[3] = {1, 1, 1};
+extern double gSize[3];
 
 void octree2VTK(ot::DA* da, Vec vec, int dof, std::string file_prefix) {
   int rank, size;
@@ -14,7 +14,7 @@ void octree2VTK(ot::DA* da, Vec vec, int dof, std::string file_prefix) {
   std::stringstream ss;
   sprintf(fname, "%s_%05d.vtk", file_prefix.c_str(), rank);
 
-  if ( !rank ) std::cout << "Writing to VTK file: " << fname << std::endl;
+  //if ( !rank ) std::cout << "Writing to VTK file: " << fname << std::endl;
 
   std::ofstream out;
   out.open( fname );
@@ -170,7 +170,7 @@ void octree2VTK_ghost(ot::DA* da, Vec vec, int dof, std::string file_prefix) {
   std::stringstream ss;
   sprintf(fname, "%s_%05d.vtk", file_prefix.c_str(), rank);
 
-  if ( !rank ) std::cout << "Writing to VTK file: " << fname << std::endl;
+  //if ( !rank ) std::cout << "Writing to VTK file: " << fname << std::endl;
 
   std::ofstream out;
   out.open( fname );

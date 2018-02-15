@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 2.8)
 project(dendro)
 
-set (PETSC_DIR /home/lofquist/LIBS/petsc-3.5.4)
+set (PETSC_DIR /home/lofquist/LIBS/petsc-3.7.5)
 set (PETSC_ARCH arch-linux2-cxx-debug)
 set (DENDRO_DIR /home/lofquist/LIBS/Dendro4)
-set (TALYFEM_DIR /home/lofquist/talyfemlib)
+set (TALYFEM_DIR /home/lofquist/taly_fem-7.1)
 set (LIBCONFIG_DIR /home/lofquist/LIBS/libconfig-1.5/install)
 
 # version number
@@ -73,5 +73,19 @@ link_directories($ENV{PETSC_DIR}/$ENV{PETSC_ARCH}/lib
 ##---------------------------------------------------------------------------------------
 ##  Helper APPS
 ##---------------------------------------------------------------------------------------
-add_executable(dendroHeat src/main.cpp src/timeStepper.cpp src/TecplotIO_ascii.cpp src/VecIO.cpp src/DendroIO_vtk.cpp src/DendroIO_plt.cpp src/interp.cpp src/analytic.cpp)
-target_link_libraries(dendroHeat dendro dendroDA petsc talyfem metis parmetis config++ ${MPI_LIBRARIES} m)
+set(HEADERS
+  include/HTEquation.h
+  include/TalyMat.h
+  include/TalyVec.h
+  include/feMatrix.h
+  include/feVector.h
+  include/feMat.h
+  include/feVec.h
+  include/nonlinear.h
+  include/parabolic.h
+  include/timeStepper.h
+  include/HTNodeData.h
+  include/interp.h
+  include/DendroIO.h)
+add_executable(dendroHeat src/main.cpp src/timeStepper.cpp src/TecplotIO_ascii.cpp src/VecIO.cpp src/DendroIO_vtk.cpp src/DendroIO_plt.cpp src/interp.cpp src/analytic.cpp ${HEADERS})
+target_link_libraries(dendroHeat dendroDA dendro petsc talyfem metis parmetis config++ ${MPI_LIBRARIES} m)

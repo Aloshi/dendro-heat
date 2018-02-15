@@ -37,8 +37,8 @@ void addAnalyticalSolution(ot::DA* da, const double* problemSize, Vec u_vec, Vec
   double err = 0;
 
   const DendroIntL* localToGlobal = da->getLocalToGlobalMap();
-  for ( da->init<ot::DA_FLAGS::WRITABLE>(); da->curr() < da->end<ot::DA_FLAGS::WRITABLE>(); da->next<ot::DA_FLAGS::WRITABLE>() ) {
-  //for ( da->init<ot::DA_FLAGS::ALL>(); da->curr() < da->end<ot::DA_FLAGS::ALL>(); da->next<ot::DA_FLAGS::ALL>() ) {
+  //for ( da->init<ot::DA_FLAGS::WRITABLE>(); da->curr() < da->end<ot::DA_FLAGS::WRITABLE>(); da->next<ot::DA_FLAGS::WRITABLE>() ) {
+  for ( da->init<ot::DA_FLAGS::ALL>(); da->curr() < da->end<ot::DA_FLAGS::ALL>(); da->next<ot::DA_FLAGS::ALL>() ) {
     // set the value
     lev = da->getLevel(da->curr());
     hx = xFac * (1 << (maxD - lev));
@@ -185,10 +185,10 @@ double calc_l2_error(ot::DA* da, const double* problemSize, Vec u_vec, int ndof,
   MPI_Allreduce(&a_norm, &all_a_norm, 1, MPI_DOUBLE, MPI_SUM, PETSC_COMM_WORLD);
   MPI_Allreduce(&c_norm, &all_c_norm, 1, MPI_DOUBLE, MPI_SUM, PETSC_COMM_WORLD);
 
-  int rank;
+  /*int rank;
   MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
   if (!rank)
-    std::cout << "a norm: " << all_a_norm << ", c norm: " << all_c_norm << "\n";
+    std::cout << "a norm: " << all_a_norm << ", c norm: " << all_c_norm << "\n";*/
 
   return sqrt(all_err);
 }

@@ -30,7 +30,12 @@ static char help[] = "Driver for heat";
 void setScalarByFunction(ot::DA* da, Vec vec, int dof, std::function<double(double,double,double,int)> f);
 int setScalarByFunction(DM da, int Ns, Vec vec, int dof, std::function<double(double,double,double,int)> f);
 
-static double gSize[3] = {1, 1, 1};
+// defined in parabolic
+void write_vec_matlab(Vec vec, const char* name, double ts);
+
+double gSize[3] = {1, 1, 1};
+PetscBool g_mat_debug = PETSC_FALSE;
+PetscBool g_vec_debug = PETSC_FALSE;
 
 float uniform() {
   return float(rand()) / RAND_MAX; // [0,1)
@@ -120,13 +125,13 @@ std::vector<double> genPoints(int n_pts, double mean = 0.5, double dev = 0.1)
 
 std::vector<ot::TreeNode> buildOct()
 {
-  int n_pts = 8*8*8;
+  /*int n_pts = 8*8*8;
   std::vector<double> pts = genPoints(n_pts);
   double gSize[3] = {1.0, 1.0, 1.0};
   int dim = 3;
   int maxOctDepth = 8;
   int maxPtsPerOctant = 1;
-  bool incCorner = true;
+  bool incCorner = true;*/
 
   /*std::vector<ot::TreeNode> linOct, balOct, newLinOct;
 
@@ -157,6 +162,7 @@ int main(int argc, char **argv)
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   int Ns = 16;
+  int refine_lvl = 3;
   int dof = 1;
 
   char problemName[PETSC_MAX_PATH_LEN];
@@ -185,6 +191,9 @@ int main(int argc, char **argv)
 
   // get Ns
   CHKERRQ ( PetscOptionsGetInt(NULL, 0,"-Ns",&Ns,0) );
+  CHKERRQ ( PetscOptionsGetInt(NULL, 0,"-refine_lvl", &refine_lvl, 0) );
+  CHKERRQ ( PetscOptionsGetBool(NULL, 0,"-mat_debug", &g_mat_debug, 0) );
+  CHKERRQ ( PetscOptionsGetBool(NULL, 0,"-vec_debug", &g_vec_debug, 0) );
   CHKERRQ ( PetscOptionsGetScalar(NULL, 0,"-t0",&t0,0) );
   CHKERRQ ( PetscOptionsGetScalar(NULL, 0,"-t1",&t1,0) );
   CHKERRQ ( PetscOptionsGetScalar(NULL, 0,"-dt",&dt,0) );
@@ -209,8 +218,19 @@ int main(int argc, char **argv)
     CHKERRQ( DMCreateGlobalVector(petscDA, &initialTemperature) );
   } else {
     // use octree
-    auto oct = buildOct();  // TODO pass in Ns
-    octDA = new ot::DA(oct, PETSC_COMM_WORLD, PETSC_COMM_WORLD, 0.3);
+    /*std::vector<ot::TreeNode> oct;
+    const int max_depth = 8;
+    assert(refine_lvl < max_depth);
+    createRegularOctree(oct, refine_lvl, 3, max_depth, MPI_COMM_WORLD);
+    octDA = new ot::DA(oct, PETSC_COMM_WORLD, PETSC_COMM_WORLD, 0.3);*/
+
+    double ctr[3] = {0.5, 0.5, 0.5};
+    double r = 0.1;
+    auto fx = [&](double x, double y, double z) -> double {
+      return sqrt((x-ctr[0])*(x-ctr[0]) + (y-ctr[1])*(y-ctr[1]) + (z-ctr[2])*(z-ctr[2])) - r;
+    };
+    assert(refine_lvl < 6);
+    octDA = ot::function_to_DA(fx, [](double, double, double) { return 1.0; }, refine_lvl, 6, gSize, false, MPI_COMM_WORLD);
 
     // create vectors 
     octDA->createVector(rho, true, false, 1 /*dof*/);
@@ -240,6 +260,10 @@ int main(int argc, char **argv)
   }
 
   if (octDA) {
+    /*setScalarByFunction(octDA, initialTemperature, dof, [](double x, double y, double z, int dof) {
+      return sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
+    });*/
+
     setScalarByFunction(octDA, initialTemperature, dof, [](double x, double y, double z, int dof) {
       return sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
     });
@@ -249,6 +273,8 @@ int main(int argc, char **argv)
     VecNorm(initialTemperature, NORM_2, &norm_l2);
     if (!rank)
       std::cout << "norm_inf: " << norm_inf << ", norm_l2: " << norm_l2 << std::endl;
+
+    write_vec_matlab(initialTemperature, "ic_vec", 0.0);
   }
 
   // print IC
@@ -266,7 +292,8 @@ int main(int argc, char **argv)
   }
 
   unsigned int numSteps = (unsigned int)(ceil(( ti.stop - ti.start)/ti.step));
-  std::cout << "Numsteps is " << numSteps << std::endl;
+  if (rank == 0)
+    std::cout << "Numsteps is " << numSteps << std::endl;
 
   // Setup Matrices and Force Vector ...
   Mass->setProblemDimensions(1.0, 1.0, 1.0);
@@ -333,6 +360,7 @@ int main(int argc, char **argv)
     }
     return b;
   });
+
 
   if (!rank)
     std::cout <<"Initializing parabolic"<< std::endl;

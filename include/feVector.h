@@ -722,7 +722,8 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
     double coords[8*3];
 
     // Independent loop, loop through the nodes this processor owns..
-    for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
+    //for ( m_octDA->init<ot::DA_FLAGS::INDEPENDENT>(), m_octDA->init<ot::DA_FLAGS::WRITABLE>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::INDEPENDENT>(); m_octDA->next<ot::DA_FLAGS::INDEPENDENT>() ) {
+    for ( m_octDA->init<ot::DA_FLAGS::ALL>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::ALL>(); m_octDA->next<ot::DA_FLAGS::ALL>() ) {
       int lev = m_octDA->getLevel(m_octDA->curr());
       Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
       Point pt = m_octDA->getCurrentOffset();
@@ -762,7 +763,7 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
     //m_octDA->ReadFromGhostsEnd<PetscScalar>(in);
 
     // Dependent loop ...
-    for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
+    /*for ( m_octDA->init<ot::DA_FLAGS::DEPENDENT>(); m_octDA->curr() < m_octDA->end<ot::DA_FLAGS::DEPENDENT>(); m_octDA->next<ot::DA_FLAGS::DEPENDENT>() ) {
       int lev = m_octDA->getLevel(m_octDA->curr());
       Point h(xFac*(1<<(maxD - lev)), yFac*(1<<(maxD - lev)), zFac*(1<<(maxD - lev)));
       Point pt = m_octDA->getCurrentOffset();
@@ -796,7 +797,7 @@ bool feVector<T>::addVec_new(Vec _in, Vec _out, double scale, int indx){
 
       // interpolate hanging nodes (node_data_temp -> out)
       interp_local_to_global(node_data_temp, out, m_octDA, m_uiDof);
-    }//end DEPENDENT 
+    }//end DEPENDENT */
 
     delete[] local_in;
     delete[] local_out;

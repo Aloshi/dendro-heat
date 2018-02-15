@@ -214,6 +214,7 @@ class timeStepper {
 
   void applyMatBoundaryConditions(DM da, Mat mat);
   void applyMatBoundaryConditions(ot::DA* da, Mat mat);
+  void applyMatVecBoundaryConditions(ot::DA* da, Vec in, Vec out);
   void applyVecBoundaryConditions(DM da, Vec rhs);
   void applyVecBoundaryConditions(ot::DA* da, Vec rhs);
 

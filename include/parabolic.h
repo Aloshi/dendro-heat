@@ -93,13 +93,18 @@ class parabolic : public timeStepper //<parabolic>
   bool m_matrixFree;
 };
 
+extern PetscBool g_mat_debug;
+
 void write_mat_matlab(Mat mat, const char* name, double ts)
 {
+  if (!g_mat_debug)
+    return;
+
   int size;
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
   std::stringstream ss;
-  ss << name << "_ts" << (int) ts << ".m";
+  ss << name << "_ts" << (int) ts << "_size" << size << ".m";
 
   PetscViewer viewer;
   PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
@@ -108,13 +113,18 @@ void write_mat_matlab(Mat mat, const char* name, double ts)
   PetscViewerDestroy(&viewer);
 }
 
+extern PetscBool g_vec_debug;
+
 void write_vec_matlab(Vec vec, const char* name, double ts)
 {
+  if (!g_vec_debug)
+    return;
+
   int size;
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
   std::stringstream ss;
-  ss << name << "_ts" << (int) ts << ".m";
+  ss << name << "_ts" << (int) ts << "_size" << size << ".m";
 
   PetscViewer viewer;
   PetscViewerASCIIOpen(PETSC_COMM_WORLD, ss.str().c_str(), &viewer);
@@ -232,6 +242,8 @@ int parabolic::solve()
       // Get the Right hand side of the ksp solve using the current solution
       setRHS();
 
+      write_vec_matlab(m_vecRHS, "vec_before_bc", m_ti->current / m_ti->step);
+
       // apply BC to the vector
       if (m_da) {
         applyVecBoundaryConditions(m_da, m_vecRHS);
@@ -242,28 +254,27 @@ int parabolic::solve()
 
       write_vec_matlab(m_vecRHS, "vec_after_bc", m_ti->current / m_ti->step);
 
-//#ifdef __DEBUG__
-      double norm;
+/*      double norm;
       ierr = VecNorm(m_vecSolution,NORM_INFINITY,&norm); CHKERRQ(ierr);
       if (rank == 0) {
         std::cout << "norm of the solution @ " << m_ti->current  << " = " << norm << std::endl;
-      }
-//#endif
+      }*/
 
       // assemble matrix if this isn't matrix-free
       if (!m_matrixFree) {
         MatZeroEntries(m_matJacobian);
         m_TalyMat->GetAssembledMatrix_new(&m_matJacobian, 0, m_vecSolution);
-        //write_mat_matlab(m_matJacobian, "mat_before_bc");
+
+        // apply boundary conditions to matrix
+        if (m_da) {
+          applyMatBoundaryConditions(m_da, m_matJacobian);
+        }
+        if (m_octDA) {
+          applyMatBoundaryConditions(m_octDA, m_matJacobian);
+        }
       }
 
-      // apply boundary conditions to matrix
-      if (m_da) {
-        applyMatBoundaryConditions(m_da, m_matJacobian);
-      }
-      if (m_octDA) {
-        applyMatBoundaryConditions(m_octDA, m_matJacobian);
-      }
+      write_mat_matlab(m_matJacobian, "mat_before_bc", m_ti->current / m_ti->step);
 
       write_mat_matlab(m_matJacobian, "mat_after_bc", m_ti->current / m_ti->step);
 
@@ -312,11 +323,11 @@ int parabolic::solve()
 void parabolic::jacobianMatMult(Vec In, Vec Out)
 {
   assert(m_matrixFree);
-  VecZeroEntries(Out); /* Clear to zeros*/
+  VecZeroEntries(Out);
 
   if (m_TalyMat) {
     m_TalyMat->MatVec_new(In, Out);
-    //m_TalyMat->GetAssembledMatrix_new(&M, 0, In);
+    applyMatVecBoundaryConditions(m_octDA, In, Out);
   } else {
     m_Mass->MatVec(In, Out);
     m_Stiffness->MatVec(In, Out, -m_ti->step); /* -dt factor for stiffness*/
@@ -357,7 +368,7 @@ int parabolic::monitor()
 {
   if(fmod(m_ti->currentstep,(double)(m_iMon)) < 0.0001)
    {
-          std::cout << "current step in the monitor " << m_ti->currentstep << std::endl;
+          //std::cout << "current step in the monitor " << m_ti->currentstep << std::endl;
           double norm;
           int ierr;
           Vec tempSol;
@@ -378,6 +389,7 @@ int parabolic::monitor()
     if (m_da) {
       write_vector(ss.str().c_str(), m_vecSolution, getDof(), m_da);
     } else {
+      // write_vec_matlab(m_vecSolution, "solution", m_ti->current);
       std::string asdf = ss.str();
       Vec with_analytical;
       double problemSize[3] = {1.0, 1.0, 1.0};

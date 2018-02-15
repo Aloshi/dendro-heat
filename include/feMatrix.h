@@ -270,8 +270,6 @@ feMatrix<T>::~feMatrix() {
 }
 
 
-#undef __FUNCT__
-#define __FUNCT__ "feMatrix_MatGetDiagonal"
 template <typename T>
 bool feMatrix<T>::MatGetDiagonal(Vec _diag, double scale){
 	PetscFunctionBegin;
@@ -386,8 +384,6 @@ bool feMatrix<T>::MatGetDiagonal(Vec _diag, double scale){
 *  which are computed by the ElementalMatrix() function. Use the Assemble()
 *  function for matrix based methods.
 **/
-#undef __FUNCT__
-#define __FUNCT__ "feMatrix_MatVec"
 template <typename T>
 bool feMatrix<T>::MatVec(Vec _in, Vec _out, double scale){
 	PetscFunctionBegin;
@@ -1376,7 +1372,7 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
                     MPI_Gatherv(nodes_seen.data(), nodes_seen.size(), MPI_INT, all_seen.data(), sizes.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
 
                     if (rank == 0) {
-                      unsigned int total_nodes = *std::max_element(all_seen.begin(), all_seen.end()) + 1;
+                      /*unsigned int total_nodes = *std::max_element(all_seen.begin(), all_seen.end()) + 1;
                       std::vector< std::vector<int> > seen_by(total_nodes);
 
                       for (int i = 0; i < mpi_size; i++) {
@@ -1384,7 +1380,7 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
                           unsigned int node = all_seen.at(displs.at(i) + j);
                           seen_by.at(node).push_back(i);
                         }
-                      }
+                      }*/
 
                       /*for (unsigned int i = 0; i < seen_by.size(); i++) {
                         std::cout << "Global node " << i << " was written to by procs: ";
@@ -1416,7 +1412,7 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
                     std::vector<unsigned int> all_seen(total);
                     MPI_Gatherv(elems_seen.data(), elems_seen.size(), MPI_INT, all_seen.data(), sizes.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
 
-                    if (rank == 0) {
+                    /*if (rank == 0) {
                       unsigned int total_elems = *std::max_element(all_seen.begin(), all_seen.end()) + 1;
                       std::vector< std::vector<int> > seen_by(total_elems);
 
@@ -1437,7 +1433,7 @@ bool feMatrix<T>::GetAssembledMatrix_new(Mat *J, MatType mtype, Vec _in) {
                           std::cout << "\n";
                         }
                       }
-                    }
+                    }*/
                   }
                 }
 	}
